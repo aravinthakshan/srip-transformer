@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+### ------------------------ Models ------------------------ ###
 class T1LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size=64, num_layers=1):  # Fixed: was missing __
         super().__init__()

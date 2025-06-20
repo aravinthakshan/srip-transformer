@@ -1,6 +1,7 @@
 import numpy as np 
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
+#-- Metrics for model evaluation --#
 def nse(y_true, y_pred):
     if np.all(y_true == np.mean(y_true)):
         return -np.inf

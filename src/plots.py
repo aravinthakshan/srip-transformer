@@ -5,6 +5,7 @@ import numpy as np
 import os
 import sys
 
+#----------Main Plotting Functions for Combined Station Comparison----------#
 def create_output_directory(base_output_dir):
     output_dir = os.path.join(base_output_dir, "ppt_graphs_combined")
     if not os.path.exists(output_dir):

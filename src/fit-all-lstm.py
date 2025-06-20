@@ -3,8 +3,6 @@ import os
 import pandas as pd
 import re
 from datetime import datetime
-from misc import RatingCurveFitter
-from misc import create_run_directory, save_run_info
 
 def parse_run_info(run_info_path):
     parsed_data = {}
@@ -183,12 +181,13 @@ def run_experiment(master_output_dir_for_run, station_file, features, target_var
         print(f"An unexpected error occurred for experiment {description}: {e}")
         return None
 
+### ------------------------ This function is the main entry point for running all experiments and plotting ------------------------ ###
 def main():
     from datetime import datetime
     from misc import RatingCurveFitter
     from misc import create_run_directory, save_run_info
-    new_station_files = [
-        'new_Barmanghat_with_hierarchical_quantiles',
+    new_station_files = [ # station files here
+        'new_Barmanghat_with_hierarchical_quantiles', 
         'new_Garudeshwar_with_hierarchical_quantiles',
         'new_Handia_with_hierarchical_quantiles',
         'new_Hoshangabad_with_hierarchical_quantiles',
@@ -197,7 +196,7 @@ def main():
         'new_Sandia_with_hierarchical_quantiles'
     ]
     
-    feature_sets = {
+    feature_sets = { # station feature sets here
         'everything_w_modelq': [
             'rainfall', 'tmin', 'tmax', 'waterlevel_final', 'streamflow_final',
             'Rain_cumulative_7d', 'Rain_cumulative_3d', 'hierarchical_feature_quantile_0.5',
@@ -205,7 +204,7 @@ def main():
         ],
     }
     
-    target_variables = ["waterlevel_final", "streamflow_final"]
+    target_variables = ["waterlevel_final", "streamflow_final"] # target variables here
     Desc = "Everything"
     script_dir = os.path.dirname(os.path.abspath(__file__))
     master_output_dir = os.path.join(script_dir, f"Fit_lstm_runs_{Desc}")
@@ -244,7 +243,7 @@ def main():
                     full_station_path,
                     features,
                     target_variable,
-                    epochs=25
+                    epochs=25 # number of epochs here 
                 )
                 
                 if run_info_file_path:

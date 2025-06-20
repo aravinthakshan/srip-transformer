@@ -13,6 +13,8 @@ from tqdm import tqdm
 import json
 import math
 
+#----------------Tranformer + LSTM Code ----------------#
+
 # Metrics Functions
 def nse(y_true, y_pred):
     if np.all(y_true == np.mean(y_true)):

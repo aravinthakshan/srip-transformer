@@ -17,8 +17,7 @@ def shifted_quadratic(wse, a, b):
 def shifted_cubic(wse, a, b):
     return a * (wse - b)**3
 
-
-
+### ------------------------ Curve Fitting for Rating Waterlevel to Streamflow Curves ------------------------ ###
 class RatingCurveFitter:
     def __init__(self):  # Fixed: was missing __
         self.functions = {

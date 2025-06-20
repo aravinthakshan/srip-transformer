@@ -21,6 +21,7 @@ from lstm import T1LSTMModel, T2LSTMModel, T3LSTMModel
 from misc import create_run_directory, save_run_info
 
         
+### ------------------------ evaluation and training scripts ------------------------ ###
 
 def get_predictions(model, data_loader, device='cpu', use_rating_curve=False):
     model.eval()
