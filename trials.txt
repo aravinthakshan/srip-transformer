@@ -8,3 +8,180 @@
 # skip connections between lstm and trasnfomrer
 # pooling layer 
 
+
+### do mha multi head attention instead of fc ashould improce results a lot
+##Temporal Convolutional Networks (TCNs) - Parallel processing, dilated convolutions
+## Residual LSTM - Skip connections in LSTM
+## Attention over time windows - Focus on recent vs distant past differently
+
+"""
+
+
+import torch
+import torch.nn as nn
+import math
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * 
+                           -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe.unsqueeze(0))
+        
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)]
+
+class MultiScaleAttention(nn.Module):
+    def __init__(self, hidden_size, num_heads=8, num_layers=2):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
+            for _ in range(num_layers)
+        ])
+        self.norms = nn.ModuleList([
+            nn.LayerNorm(hidden_size) for _ in range(num_layers)
+        ])
+        self.dropout = nn.Dropout(0.1)
+        
+    def forward(self, x):
+        for attn, norm in zip(self.layers, self.norms):
+            residual = x
+            attn_out, _ = attn(x, x, x)
+            x = norm(residual + self.dropout(attn_out))
+        return x
+
+class AdaptiveFeatureFusion(nn.Module):
+    def __init__(self, lstm_dim, feature_dim, hidden_dim):
+        super().__init__()
+        self.lstm_proj = nn.Linear(lstm_dim, hidden_dim)
+        self.feature_proj = nn.Sequential(
+            nn.Linear(feature_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim)
+        )
+        self.gate = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Sigmoid()
+        )
+        self.fusion = nn.Linear(hidden_dim * 2, hidden_dim)
+        
+    def forward(self, lstm_features, additional_features):
+        lstm_proj = self.lstm_proj(lstm_features)
+        feature_proj = self.feature_proj(additional_features)
+        
+        # Gated fusion
+        concat = torch.cat([lstm_proj, feature_proj], dim=-1)
+        gate_weights = self.gate(concat)
+        
+        gated_lstm = lstm_proj * gate_weights
+        gated_features = feature_proj * (1 - gate_weights)
+        
+        return self.fusion(torch.cat([gated_lstm, gated_features], dim=-1))
+
+class ImprovedT1LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=2):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, 
+                           batch_first=True, dropout=0.1)
+        self.pos_encoding = PositionalEncoding(hidden_size)
+        self.attention = MultiScaleAttention(hidden_size, num_heads=8, num_layers=2)
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 2, 1)
+        )
+        
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = self.pos_encoding(lstm_out)
+        attn_out = self.attention(lstm_out)
+        # Global average pooling + max pooling
+        avg_pool = torch.mean(attn_out, dim=1)
+        max_pool, _ = torch.max(attn_out, dim=1)
+        combined = avg_pool + max_pool
+        return self.fc(combined).squeeze(-1)
+
+class ImprovedT2LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=2, use_rating_curve=True):
+        super().__init__()
+        self.use_rating_curve = use_rating_curve
+        self.hidden_size = hidden_size
+        
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, 
+                           batch_first=True, dropout=0.1)
+        self.pos_encoding = PositionalEncoding(hidden_size)
+        self.attention = MultiScaleAttention(hidden_size, num_heads=8, num_layers=2)
+        
+        feature_dim = 2 if use_rating_curve else 1
+        self.feature_fusion = AdaptiveFeatureFusion(hidden_size, feature_dim, hidden_size)
+        
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 2, 1)
+        )
+        
+    def forward(self, x, t1_pred, rating_pred=None):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = self.pos_encoding(lstm_out)
+        attn_out = self.attention(lstm_out)
+        
+        # Pool LSTM features
+        lstm_pooled = torch.mean(attn_out, dim=1)
+        
+        # Prepare additional features
+        if self.use_rating_curve and rating_pred is not None:
+            additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
+        else:
+            additional_features = t1_pred.unsqueeze(-1)
+            
+        # Adaptive fusion
+        fused_features = self.feature_fusion(lstm_pooled, additional_features)
+        return self.fc(fused_features).squeeze(-1)
+
+class ImprovedT3LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=2, use_rating_curve=True):
+        super().__init__()
+        self.use_rating_curve = use_rating_curve
+        self.hidden_size = hidden_size
+        
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, 
+                           batch_first=True, dropout=0.1)
+        self.pos_encoding = PositionalEncoding(hidden_size)
+        self.attention = MultiScaleAttention(hidden_size, num_heads=8, num_layers=2)
+        
+        feature_dim = 4 if use_rating_curve else 2
+        self.feature_fusion = AdaptiveFeatureFusion(hidden_size, feature_dim, hidden_size)
+        
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 2, 1)
+        )
+        
+    def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = self.pos_encoding(lstm_out)
+        attn_out = self.attention(lstm_out)
+        
+        # Pool LSTM features
+        lstm_pooled = torch.mean(attn_out, dim=1)
+        
+        # Prepare additional features
+        if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+            additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
+        else:
+            additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
+            
+        # Adaptive fusion
+        fused_features = self.feature_fusion(lstm_pooled, additional_features)
+        return self.fc(fused_features).squeeze(-1)
+
+"""

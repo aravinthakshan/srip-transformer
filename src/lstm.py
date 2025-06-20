@@ -1,237 +1,300 @@
-import torch
-import torch.nn as nn
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+# import torch
+# import torch.nn as nn
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
-# class T1LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, num_heads=8):
-#         super().__init__()
-#         self.hidden_size = hidden_size
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        
-#         # Multi-head attention
-#         self.multihead_attn = nn.MultiheadAttention(
-#             embed_dim=hidden_size,
-#             num_heads=num_heads,
-#             batch_first=True
-#         )
-        
-#         # Final output layer
-#         self.fc = nn.Linear(hidden_size, 1)
-#         self.layer_norm = nn.LayerNorm(hidden_size)
-        
-#     def forward(self, x):
-#         # LSTM forward pass
-#         lstm_out, _ = self.lstm(x)
-        
-#         # Apply multi-head attention (self-attention on LSTM outputs)
-#         attn_out, _ = self.multihead_attn(lstm_out, lstm_out, lstm_out)
-        
-#         # Layer normalization and residual connection
-#         attn_out = self.layer_norm(attn_out + lstm_out)
-        
-#         # Use the last timestep output
-#         final_out = attn_out[:, -1, :]
-        
-#         return self.fc(final_out).squeeze(-1)
-
-
-# class T2LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, num_heads=8, use_rating_curve=True):
-#         super().__init__()
-#         self.use_rating_curve = use_rating_curve
-#         self.hidden_size = hidden_size
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        
-#         # Multi-head attention for LSTM outputs
-#         self.lstm_multihead_attn = nn.MultiheadAttention(
-#             embed_dim=hidden_size,
-#             num_heads=num_heads,
-#             batch_first=True
-#         )
-        
-#         # Determine feature dimension based on use_rating_curve
-#         if self.use_rating_curve:
-#             feature_dim = hidden_size + 2  # LSTM + T+1 pred + rating curve
-#         else:
-#             feature_dim = hidden_size + 1  # LSTM + T+1 pred only
-        
-#         # Multi-head attention for combined features
-#         self.feature_multihead_attn = nn.MultiheadAttention(
-#             embed_dim=feature_dim,
-#             num_heads=min(num_heads, feature_dim),  # Ensure num_heads <= feature_dim
-#             batch_first=True
-#         )
-        
-#         self.layer_norm1 = nn.LayerNorm(hidden_size)
-#         self.layer_norm2 = nn.LayerNorm(feature_dim)
-#         self.fc = nn.Linear(feature_dim, 1)
-#         self.relu = nn.ReLU()
-        
-#     def forward(self, x, t1_pred, rating_pred=None):
-#         # LSTM forward pass
-#         lstm_out, _ = self.lstm(x)
-        
-#         # Apply multi-head attention to LSTM outputs
-#         attn_lstm_out, _ = self.lstm_multihead_attn(lstm_out, lstm_out, lstm_out)
-#         attn_lstm_out = self.layer_norm1(attn_lstm_out + lstm_out)
-        
-#         # Use the last timestep output from attention
-#         lstm_final = attn_lstm_out[:, -1, :]
-        
-#         # Combine with predictions
-#         if self.use_rating_curve and rating_pred is not None:
-#             combined = torch.cat([lstm_final, t1_pred.unsqueeze(-1), rating_pred.unsqueeze(-1)], dim=-1)
-#         else:
-#             combined = torch.cat([lstm_final, t1_pred.unsqueeze(-1)], dim=-1)
-        
-#         # Add sequence dimension for attention (treating combined features as a sequence of length 1)
-#         combined_seq = combined.unsqueeze(1)  # [batch_size, 1, feature_dim]
-        
-#         # Apply multi-head attention to combined features
-#         attn_combined, _ = self.feature_multihead_attn(combined_seq, combined_seq, combined_seq)
-#         attn_combined = self.layer_norm2(attn_combined + combined_seq)
-        
-#         # Remove sequence dimension and apply final layer
-#         final_features = attn_combined.squeeze(1)
-#         out = self.relu(final_features)
-        
-#         return self.fc(out).squeeze(-1)
-
-
-# class T3LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, num_heads=8, use_rating_curve=True):
-#         super().__init__()
-#         self.use_rating_curve = use_rating_curve
-#         self.hidden_size = hidden_size
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        
-#         # Multi-head attention for LSTM outputs
-#         self.lstm_multihead_attn = nn.MultiheadAttention(
-#             embed_dim=hidden_size,
-#             num_heads=num_heads,
-#             batch_first=True
-#         )
-        
-#         # Determine feature dimension based on use_rating_curve
-#         if self.use_rating_curve:
-#             feature_dim = hidden_size + 4  # LSTM + T+1 + T+2 + 2 rating curves
-#         else:
-#             feature_dim = hidden_size + 2  # LSTM + T+1 + T+2 only
-        
-#         # Multi-head attention for combined features
-#         self.feature_multihead_attn = nn.MultiheadAttention(
-#             embed_dim=feature_dim,
-#             num_heads=min(num_heads, feature_dim),  # Ensure num_heads <= feature_dim
-#             batch_first=True
-#         )
-        
-#         self.layer_norm1 = nn.LayerNorm(hidden_size)
-#         self.layer_norm2 = nn.LayerNorm(feature_dim)
-#         self.fc = nn.Linear(feature_dim, 1)
-#         self.relu = nn.ReLU()
-        
-#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
-#         # LSTM forward pass
-#         lstm_out, _ = self.lstm(x)
-        
-#         # Apply multi-head attention to LSTM outputs
-#         attn_lstm_out, _ = self.lstm_multihead_attn(lstm_out, lstm_out, lstm_out)
-#         attn_lstm_out = self.layer_norm1(attn_lstm_out + lstm_out)
-        
-#         # Use the last timestep output from attention
-#         lstm_final = attn_lstm_out[:, -1, :]
-        
-#         # Combine with predictions
-#         if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
-#             combined = torch.cat([lstm_final, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1),
-#                                 rating_pred_t1.unsqueeze(-1), rating_pred_t2.unsqueeze(-1)], dim=-1)
-#         else:
-#             combined = torch.cat([lstm_final, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1)], dim=-1)
-        
-#         # Add sequence dimension for attention (treating combined features as a sequence of length 1)
-#         combined_seq = combined.unsqueeze(1)  # [batch_size, 1, feature_dim]
-        
-#         # Apply multi-head attention to combined features
-#         attn_combined, _ = self.feature_multihead_attn(combined_seq, combined_seq, combined_seq)
-#         attn_combined = self.layer_norm2(attn_combined + combined_seq)
-        
-#         # Remove sequence dimension and apply final layer
-#         final_features = attn_combined.squeeze(1)
-#         out = self.relu(final_features)
-        
-#         return self.fc(out).squeeze(-1)
-    
-### ------------------------ Models ------------------------ ###
-class T1LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1):  # Fixed: was missing __
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * 
+                           -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        if d_model % 2 == 1:
+            pe[:, 1::2] = torch.cos(position * div_term[:-1])
+        else:
+            pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe.unsqueeze(0))
     
     def forward(self, x):
-        out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :]).squeeze(-1)
+        return x + self.pe[:, :x.size(1)]
+
+class T1LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_pos_encoding=True):
+        super().__init__()
+        self.use_pos_encoding = use_pos_encoding
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        
+        if self.use_pos_encoding:
+            self.pos_encoding = PositionalEncoding(hidden_size)
+            
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+        
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        
+        # Apply positional encoding to LSTM outputs
+        if self.use_pos_encoding:
+            lstm_out = self.pos_encoding(lstm_out)
+            
+        # Use the last output as query, all outputs as key and value
+        query = lstm_out[:, -1:, :]  # Shape: (batch, 1, hidden_size)
+        attn_out, _ = self.attention(query, lstm_out, lstm_out)
+        return self.fc(attn_out.squeeze(1)).squeeze(-1)
 
 class T2LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):  # Fixed: was missing __
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, use_pos_encoding=True):
         super().__init__()
         self.use_rating_curve = use_rating_curve
+        self.use_pos_encoding = use_pos_encoding
+        self.hidden_size = hidden_size
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-        # Adjust the input size of the first fully connected layer based on use_rating_curve
-        if self.use_rating_curve:
-            self.fc1 = nn.Linear(hidden_size + 2, hidden_size // 2)  # LSTM + T+1 pred + rating curve
-        else:
-            self.fc1 = nn.Linear(hidden_size + 1, hidden_size // 2)  # LSTM + T+1 pred only
-            
-        self.fc2 = nn.Linear(hidden_size // 2, 1)
-        self.relu = nn.ReLU()
-    
-    def forward(self, x, t1_pred, rating_pred=None):
-        out, _ = self.lstm(x)
-        lstm_out = out[:, -1, :]
+        if self.use_pos_encoding:
+            self.pos_encoding = PositionalEncoding(hidden_size)
         
-        if self.use_rating_curve and rating_pred is not None:
-            combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), rating_pred.unsqueeze(-1)], dim=-1)
+        # Create embeddings for additional inputs
+        if self.use_rating_curve:
+            self.additional_features = 2  # T+1 pred + rating curve
         else:
-            combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1)], dim=-1)
+            self.additional_features = 1  # T+1 pred only
             
-        out = self.relu(self.fc1(combined))
-        return self.fc2(out).squeeze(-1)
+        self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+        
+    def forward(self, x, t1_pred, rating_pred=None):
+        lstm_out, _ = self.lstm(x)
+        
+        # Apply positional encoding to LSTM outputs
+        if self.use_pos_encoding:
+            lstm_out = self.pos_encoding(lstm_out)
+        
+        # Prepare additional features
+        if self.use_rating_curve and rating_pred is not None:
+            additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
+        else:
+            additional_features = t1_pred.unsqueeze(-1)
+            
+        # Project additional features to hidden_size
+        additional_projected = self.feature_projection(additional_features).unsqueeze(1)  # (batch, 1, hidden_size)
+        
+        # Combine LSTM output with additional features
+        combined_features = torch.cat([lstm_out, additional_projected], dim=1)  # (batch, seq_len+1, hidden_size)
+        
+        # Use the additional features as query
+        attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+        return self.fc(attn_out.squeeze(1)).squeeze(-1)
 
 class T3LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):  # Fixed: was missing __
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, use_pos_encoding=True):
         super().__init__()
         self.use_rating_curve = use_rating_curve
+        self.use_pos_encoding = use_pos_encoding
+        self.hidden_size = hidden_size
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-        # Adjust the input size based on use_rating_curve
-        if self.use_rating_curve:
-            self.fc1 = nn.Linear(hidden_size + 4, hidden_size // 2)  # LSTM + T+1 + T+2 + 2 rating curves
-        else:
-            self.fc1 = nn.Linear(hidden_size + 2, hidden_size // 2)  # LSTM + T+1 + T+2 only
-            
-        self.fc2 = nn.Linear(hidden_size // 2, 1)
-        self.relu = nn.ReLU()
-    
-    def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
-        out, _ = self.lstm(x)
-        lstm_out = out[:, -1, :]
+        if self.use_pos_encoding:
+            self.pos_encoding = PositionalEncoding(hidden_size)
         
-        if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
-            combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1),
-                                 rating_pred_t1.unsqueeze(-1), rating_pred_t2.unsqueeze(-1)], dim=-1)
+        # Create embeddings for additional inputs
+        if self.use_rating_curve:
+            self.additional_features = 4  # T+1 + T+2 + 2 rating curves
         else:
-            combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1)], dim=-1)
+            self.additional_features = 2  # T+1 + T+2 only
             
-        out = self.relu(self.fc1(combined))
-        return self.fc2(out).squeeze(-1)
+        self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+        
+    def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+        lstm_out, _ = self.lstm(x)
+        
+        # Apply positional encoding to LSTM outputs
+        if self.use_pos_encoding:
+            lstm_out = self.pos_encoding(lstm_out)
+        
+        # Prepare additional features
+        if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+            additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
+        else:
+            additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
+            
+        # Project additional features to hidden_size
+        additional_projected = self.feature_projection(additional_features).unsqueeze(1)  # (batch, 1, hidden_size)
+        
+        # Combine LSTM output with additional features
+        combined_features = torch.cat([lstm_out, additional_projected], dim=1)  # (batch, seq_len+1, hidden_size)
+        
+        # Use the additional features as query
+        attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+        return self.fc(attn_out.squeeze(1)).squeeze(-1)
+
+
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+# import torch
+# import torch.nn as nn
+
+# class T1LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1):
+#         super().__init__()
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+        
+#     def forward(self, x):
+#         lstm_out, _ = self.lstm(x)
+#         # Use the last output as query, all outputs as key and value
+#         query = lstm_out[:, -1:, :]  # Shape: (batch, 1, hidden_size)
+#         attn_out, _ = self.attention(query, lstm_out, lstm_out)
+#         return self.fc(attn_out.squeeze(1)).squeeze(-1)
+
+# class T2LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.hidden_size = hidden_size
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        
+#         # Create embeddings for additional inputs
+#         if self.use_rating_curve:
+#             self.additional_features = 2  # T+1 pred + rating curve
+#         else:
+#             self.additional_features = 1  # T+1 pred only
+            
+#         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+        
+#     def forward(self, x, t1_pred, rating_pred=None):
+#         lstm_out, _ = self.lstm(x)
+        
+#         # Prepare additional features
+#         if self.use_rating_curve and rating_pred is not None:
+#             additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
+#         else:
+#             additional_features = t1_pred.unsqueeze(-1)
+            
+#         # Project additional features to hidden_size
+#         additional_projected = self.feature_projection(additional_features).unsqueeze(1)  # (batch, 1, hidden_size)
+        
+#         # Combine LSTM output with additional features
+#         combined_features = torch.cat([lstm_out, additional_projected], dim=1)  # (batch, seq_len+1, hidden_size)
+        
+#         # Use the additional features as query
+#         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+#         return self.fc(attn_out.squeeze(1)).squeeze(-1)
+
+# class T3LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.hidden_size = hidden_size
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        
+#         # Create embeddings for additional inputs
+#         if self.use_rating_curve:
+#             self.additional_features = 4  # T+1 + T+2 + 2 rating curves
+#         else:
+#             self.additional_features = 2  # T+1 + T+2 only
+            
+#         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+        
+#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+#         lstm_out, _ = self.lstm(x)
+        
+#         # Prepare additional features
+#         if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+#             additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
+#         else:
+#             additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
+            
+#         # Project additional features to hidden_size
+#         additional_projected = self.feature_projection(additional_features).unsqueeze(1)  # (batch, 1, hidden_size)
+        
+#         # Combine LSTM output with additional features
+#         combined_features = torch.cat([lstm_out, additional_projected], dim=1)  # (batch, seq_len+1, hidden_size)
+        
+#         # Use the additional features as query
+#         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+#         return self.fc(attn_out.squeeze(1)).squeeze(-1)
+# ### ------------------------ Models ------------------------ ###
+# class T1LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1):  # Fixed: was missing __
+#         super().__init__()
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+    
+#     def forward(self, x):
+#         out, _ = self.lstm(x)
+#         return self.fc(out[:, -1, :]).squeeze(-1)
+
+# class T2LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):  # Fixed: was missing __
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        
+#         # Adjust the input size of the first fully connected layer based on use_rating_curve
+#         if self.use_rating_curve:
+#             self.fc1 = nn.Linear(hidden_size + 2, hidden_size // 2)  # LSTM + T+1 pred + rating curve
+#         else:
+#             self.fc1 = nn.Linear(hidden_size + 1, hidden_size // 2)  # LSTM + T+1 pred only
+            
+#         self.fc2 = nn.Linear(hidden_size // 2, 1)
+#         self.relu = nn.ReLU()
+    
+#     def forward(self, x, t1_pred, rating_pred=None):
+#         out, _ = self.lstm(x)
+#         lstm_out = out[:, -1, :]
+        
+#         if self.use_rating_curve and rating_pred is not None:
+#             combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), rating_pred.unsqueeze(-1)], dim=-1)
+#         else:
+#             combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1)], dim=-1)
+            
+#         out = self.relu(self.fc1(combined))
+#         return self.fc2(out).squeeze(-1)
+
+# class T3LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):  # Fixed: was missing __
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        
+#         # Adjust the input size based on use_rating_curve
+#         if self.use_rating_curve:
+#             self.fc1 = nn.Linear(hidden_size + 4, hidden_size // 2)  # LSTM + T+1 + T+2 + 2 rating curves
+#         else:
+#             self.fc1 = nn.Linear(hidden_size + 2, hidden_size // 2)  # LSTM + T+1 + T+2 only
+            
+#         self.fc2 = nn.Linear(hidden_size // 2, 1)
+#         self.relu = nn.ReLU()
+    
+#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+#         out, _ = self.lstm(x)
+#         lstm_out = out[:, -1, :]
+        
+#         if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+#             combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1),
+#                                  rating_pred_t1.unsqueeze(-1), rating_pred_t2.unsqueeze(-1)], dim=-1)
+#         else:
+#             combined = torch.cat([lstm_out, t1_pred.unsqueeze(-1), t2_pred.unsqueeze(-1)], dim=-1)
+            
+#         out = self.relu(self.fc1(combined))
+#         return self.fc2(out).squeeze(-1)
 
 
 # import torch
