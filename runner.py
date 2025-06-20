@@ -70,66 +70,6 @@ def evaluate(y_true, y_pred):
         'KGE': kge(y_true, y_pred)
     }
 
-# # Dataset Classes
-# class T1Dataset(Dataset):
-#     def __init__(self, data, input_cols, target_col, lookback=30):
-#         self.X = data[input_cols].values
-#         self.y = data[target_col].values
-#         self.lookback = lookback
-
-#     def __len__(self):
-#         if len(self.X) <= self.lookback + 1:
-#              return 0
-#         return len(self.X) - self.lookback - 1
-
-#     def __getitem__(self, idx):
-#         x = self.X[idx : idx + self.lookback]
-#         y = self.y[idx + self.lookback]
-#         return (torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
-
-# class T2Dataset(Dataset):
-#     def __init__(self, data, input_cols, target_col, t1_predictions, lookback=30):
-#         self.X = data[input_cols].values
-#         self.y = data[target_col].values
-#         self.t1_preds = t1_predictions
-#         self.lookback = lookback
-
-#     def __len__(self):
-#         min_len = min(len(self.X) - self.lookback - 1, len(self.t1_preds) - 1)
-#         if min_len <= 0:
-#             return 0
-#         return min_len
-
-#     def __getitem__(self, idx):
-#         x = self.X[idx : idx + self.lookback]
-#         t1_pred = self.t1_preds[idx]
-#         y = self.y[idx + self.lookback + 1]
-#         return (torch.tensor(x, dtype=torch.float32), torch.tensor(t1_pred, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
-
-# class T3Dataset(Dataset):
-#     def __init__(self, data, input_cols, target_col, t1_predictions, t2_predictions, lookback=30):
-#         self.X = data[input_cols].values
-#         self.y = data[target_col].values
-#         self.t1_preds = t1_predictions
-#         self.t2_preds = t2_predictions
-#         self.lookback = lookback
-
-#     def __len__(self):
-#         min_len = min(len(self.X) - self.lookback - 2, len(self.t2_preds) - 1)
-#         if min_len <= 0:
-#             return 0
-#         return min_len
-
-#     def __getitem__(self, idx):
-#         x = self.X[idx : idx + self.lookback]
-#         t1_pred = self.t1_preds[idx]
-#         t2_pred = self.t2_preds[idx]
-#         y = self.y[idx + self.lookback + 2]
-#         return (torch.tensor(x, dtype=torch.float32),
-#                 torch.tensor(t1_pred, dtype=torch.float32),
-#                 torch.tensor(t2_pred, dtype=torch.float32),
-#                 torch.tensor(y, dtype=torch.float32))
-
 # Dataset Classes - FIXED VERSION
 class T1Dataset(Dataset):
     def __init__(self, data, input_cols, target_col, lookback=30):
