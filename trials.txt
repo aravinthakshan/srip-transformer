@@ -1,0 +1,10 @@
+
+# bi directional  - good
+# with trasnfomrer - good
+# with differnt encoding other thna positional - bad
+
+
+# replacement for fc/linear
+# skip connections between lstm and trasnfomrer
+# pooling layer 
+
