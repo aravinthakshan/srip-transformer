@@ -38,7 +38,7 @@ class T2Dataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx : idx + self.lookback]                # t-n to t-1
-        t1_pred = self.t1_preds[idx]                         # t+1
+        t1_pred = self.t1_preds[idx + self.lookback]         # t+1
         y = self.y[idx + self.lookback + 2]                  # t+2
         if self.use_rating_curve:
             rating_pred = self.rating_curve_preds[idx + self.lookback + 2]  # t+2
@@ -76,8 +76,8 @@ class T3Dataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx : idx + self.lookback]                       # t-n to t-1
-        t1_pred = self.t1_preds[idx]                                # t+1
-        t2_pred = self.t2_preds[idx]                                # t+2
+        t1_pred = self.t1_preds[idx + self.lookback]  # ✅
+        t2_pred = self.t2_preds[idx + self.lookback]                               # t+2
         y = self.y[idx + self.lookback + 3]                         # t+3
 
         if self.use_rating_curve:

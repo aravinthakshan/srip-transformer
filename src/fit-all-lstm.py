@@ -133,7 +133,7 @@ def run_experiment(master_output_dir_for_run, station_file, features, target_var
     if 'modelq' in features and 'waterlevel_upstream' in features:
         feature_set_name = "Everything-w-Modelq"
     elif 'waterlevel_upstream' in features:
-        feature_set_name = "Everything-w/o-Modelq"
+        feature_set_name = "Everything-wo-Modelq"
     elif 'modelq' in features:
         feature_set_name = "basic_plus_modelq"
     elif 'VIC_W_dam' in features:
@@ -195,9 +195,21 @@ def main():
         'new_Manot_with_hierarchical_quantiles',
         'new_Sandia_with_hierarchical_quantiles'
     ]
+    all_other_stations=[
+        "new_BamniBanjar.csv",
+        "new_Belkhedi.csv",
+        "new_Chhidgaon.csv",
+        "new_Dindori.csv",
+        "new_Gadarwara.csv",
+        "new_Handia_2.csv",
+        "new_Kogaon.csv",
+        "new_Patan.csv",
+        "new_Pati.csv",
+        "new_Mohgaon.csv",
+    ]
     
     feature_sets = { # station feature sets here
-        'everything_w_modelq': [
+        'everything': [
             'rainfall', 'tmin', 'tmax', 'waterlevel_final', 'streamflow_final',
             'Rain_cumulative_7d', 'Rain_cumulative_3d', 'hierarchical_feature_quantile_0.5',
             'waterlevel_upstream', 'streamflow_upstream'
@@ -211,7 +223,7 @@ def main():
     os.makedirs(master_output_dir, exist_ok=True)
     print(f"All sequential LSTM experiment results will be saved under: {master_output_dir}")
     
-    station_data_path = r'/home/aravinthakshan/Projects/main-srip/hierarchial'
+    station_data_path = r'E:\SRIP 2025\Streamflow and Water-level Prediction\Final\processed_combined_files'
     
     all_run_metrics = []
     
