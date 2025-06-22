@@ -6,18 +6,32 @@ import torch
 import torch.nn as nn
 
 class T1LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=False):
         super().__init__()
+        self.use_rating_curve = use_rating_curve
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
         
-    def forward(self, x):
+        # Adjust final layer input size if using rating curve
+        final_input_size = hidden_size
+        if use_rating_curve:
+            final_input_size += 1  # Add 1 for rating curve input
+            
+        self.fc = nn.Linear(final_input_size, 1)
+        
+    def forward(self, x, rating_pred=None):
         lstm_out, _ = self.lstm(x)
         # Use the last output as query, all outputs as key and value
         query = lstm_out[:, -1:, :]  # Shape: (batch, 1, hidden_size)
         attn_out, _ = self.attention(query, lstm_out, lstm_out)
-        return self.fc(attn_out.squeeze(1)).squeeze(-1)
+        attn_features = attn_out.squeeze(1)  # Shape: (batch, hidden_size)
+        
+        if self.use_rating_curve and rating_pred is not None:
+            # Concatenate attention output with rating curve prediction
+            combined = torch.cat([attn_features, rating_pred.unsqueeze(-1)], dim=-1)
+            return self.fc(combined).squeeze(-1)
+        else:
+            return self.fc(attn_features).squeeze(-1)
 
 class T2LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):

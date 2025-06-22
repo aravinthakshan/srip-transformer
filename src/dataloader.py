@@ -4,20 +4,36 @@ from torch.utils.data import Dataset, DataLoader
 
 ### ------------------------ Dataloaders ------------------------ ###
 class T1Dataset(Dataset):
-    def __init__(self, data, input_cols, target_col, lookback=30):
+    def __init__(self, data, input_cols, target_col, rating_curve_preds=None, lookback=30):
         self.X = data[input_cols].values
         self.y = data[target_col].values
+        self.rating_curve_preds = rating_curve_preds
         self.lookback = lookback
+        self.use_rating_curve = rating_curve_preds is not None
 
     def __len__(self):
         # Need lookback (t-n to t-1) + 1 skipped (t) + 1 for y (t+1)
-        return max(0, len(self.X) - self.lookback - 1)
+        max_samples = len(self.X) - self.lookback - 1
+        
+        # Fixed: Check if rating_curve_preds is not None and has a length
+        if self.use_rating_curve and hasattr(self.rating_curve_preds, '__len__'):
+            max_samples = min(max_samples, len(self.rating_curve_preds) - self.lookback - 1)
+        
+        return max(0, max_samples)
 
     def __getitem__(self, idx):
         x = self.X[idx : idx + self.lookback]              # t-n to t-1
         y = self.y[idx + self.lookback + 1]                # t+1
-        return (torch.tensor(x, dtype=torch.float32),
-                torch.tensor(y, dtype=torch.float32))
+        
+        if self.use_rating_curve and hasattr(self.rating_curve_preds, '__len__'):
+            rating_pred = self.rating_curve_preds[idx + self.lookback + 1]  # t+1
+            return (torch.tensor(x, dtype=torch.float32),
+                    torch.tensor(rating_pred, dtype=torch.float32),
+                    torch.tensor(y, dtype=torch.float32))
+        else:
+            return (torch.tensor(x, dtype=torch.float32),
+                    torch.tensor(0.0, dtype=torch.float32),
+                    torch.tensor(y, dtype=torch.float32))
 
 class T2Dataset(Dataset):
     def __init__(self, data, input_cols, target_col, t1_predictions, rating_curve_preds=None, lookback=30):
@@ -29,8 +45,11 @@ class T2Dataset(Dataset):
         self.use_rating_curve = rating_curve_preds is not None
 
         max_samples = min(len(self.X) - lookback - 2, len(self.t1_preds))  # Skip t, predict t+2
-        if self.use_rating_curve:
+        
+        # Fixed: Check if rating_curve_preds has length
+        if self.use_rating_curve and hasattr(rating_curve_preds, '__len__'):
             max_samples = min(max_samples, len(rating_curve_preds) - lookback - 2)
+        
         self.max_samples = max(0, max_samples)
 
     def __len__(self):
@@ -38,9 +57,10 @@ class T2Dataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx : idx + self.lookback]                # t-n to t-1
-        t1_pred = self.t1_preds[idx + self.lookback]         # t+1
+        t1_pred = self.t1_preds[idx]         # t+1
         y = self.y[idx + self.lookback + 2]                  # t+2
-        if self.use_rating_curve:
+        
+        if self.use_rating_curve and hasattr(self.rating_curve_preds, '__len__'):
             rating_pred = self.rating_curve_preds[idx + self.lookback + 2]  # t+2
             return (torch.tensor(x, dtype=torch.float32),
                     torch.tensor(t1_pred, dtype=torch.float32),
@@ -65,10 +85,14 @@ class T3Dataset(Dataset):
         self.use_rating_curve = (rating_curve_preds_t1 is not None and rating_curve_preds_t2 is not None)
 
         max_samples = min(len(self.X) - lookback - 3, len(t1_predictions), len(t2_predictions))
+        
+        # Fixed: Check if rating curve predictions have length  
         if self.use_rating_curve:
-            max_samples = min(max_samples,
-                              len(rating_curve_preds_t1),
-                              len(rating_curve_preds_t2) - lookback - 3)
+            if hasattr(rating_curve_preds_t1, '__len__'):
+                max_samples = min(max_samples, len(rating_curve_preds_t1))
+            if hasattr(rating_curve_preds_t2, '__len__'):
+                max_samples = min(max_samples, len(rating_curve_preds_t2) - lookback - 3)
+        
         self.max_samples = max(0, max_samples)
 
     def __len__(self):
@@ -76,11 +100,13 @@ class T3Dataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.X[idx : idx + self.lookback]                       # t-n to t-1
-        t1_pred = self.t1_preds[idx + self.lookback]  # ✅
-        t2_pred = self.t2_preds[idx + self.lookback]                               # t+2
+        t1_pred = self.t1_preds[idx]  # t+1
+        t2_pred = self.t2_preds[idx]                               # t+2
         y = self.y[idx + self.lookback + 3]                         # t+3
 
-        if self.use_rating_curve:
+        if (self.use_rating_curve and 
+            hasattr(self.rating_curve_preds_t1, '__len__') and 
+            hasattr(self.rating_curve_preds_t2, '__len__')):
             rating_pred_t1 = self.rating_curve_preds_t1[idx]        # t+1
             rating_pred_t2 = self.rating_curve_preds_t2[idx + self.lookback + 2]  # t+2
             return (torch.tensor(x, dtype=torch.float32),

@@ -32,6 +32,12 @@ def get_predictions(model, data_loader, device='cpu', use_rating_curve=False):
                 if len(batch) == 2:  # T+1
                     x, _ = batch
                     pred = model(x.to(device))
+                elif len(batch) == 3:  # New T+1 format with rating curve
+                    x, rating_pred, _ = batch
+                    if use_rating_curve:
+                        pred = model(x.to(device), rating_pred.to(device))
+                    else:
+                        pred = model(x.to(device))
                 elif len(batch) == 4:  # T+2
                     x, t1_pred, rating_pred, _ = batch
                     if use_rating_curve:
@@ -66,14 +72,30 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     models = {}
     train_metrics = {}
     train_losses = {'T+1': [], 'T+2': [], 'T+3': []}
+    
+    rating_curve_preds_t1_train = None
+    if use_rating_curve:
+        print("Generating rating curve predictions for T+1 training...")
+        try:
+            # Generate predictions for t+1 timestep
+            waterlevel_data_t1 = train_dfs['train'][waterlevel_col].iloc[lookback+1:].values
+            if len(waterlevel_data_t1) > 0:
+                rating_curve_preds_t1_train = rating_curve_fitter.predict(waterlevel_data_t1)
+        except Exception as e:
+            print(f"Warning: Could not generate T+1 rating curve predictions: {e}")
+            rating_curve_preds_t1_train = None
+    
+    
     print("=== Training T+1 Model ===")
     t1_model = T1LSTMModel(input_size=len(features)).to(device)
     t1_criterion = nn.MSELoss()
     t1_optimizer = torch.optim.Adam(t1_model.parameters(), lr=lr)
-    t1_train_ds = T1Dataset(train_dfs['train'], features, target, lookback)
+    t1_train_ds = T1Dataset(train_dfs['train'], features, target, rating_curve_preds_t1_train, lookback)
     if len(t1_train_ds) == 0:
         print("T+1 training dataset is empty. Skipping training for T+1 and subsequent models.")
         return {}, {}
+    
+    
     t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=True)
     best_t1_nse = -np.inf
     best_t1_state = None
@@ -81,9 +103,15 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         t1_model.train()
         epoch_loss = 0
         epoch_y_true, epoch_y_pred = [], []
-        for xb, yb in t1_train_loader:
-            xb, yb = xb.to(device), yb.to(device)
-            pred = t1_model(xb)
+        for batch in t1_train_loader:
+            if use_rating_curve and len(batch) == 3:
+                xb, rating_pred, yb = batch
+                xb, rating_pred, yb = xb.to(device), rating_pred.to(device), yb.to(device)
+                pred = t1_model(xb, rating_pred)
+            else:
+                xb, _, yb = batch  # Handle both old and new format
+                xb, yb = xb.to(device), yb.to(device)
+                pred = t1_model(xb)
             loss = t1_criterion(pred, yb)
             t1_optimizer.zero_grad()
             loss.backward()
@@ -273,6 +301,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         plt.close()
     print("Training completed!")
     return models, train_metrics
+
 
 import os
 import pandas as pd
@@ -504,6 +533,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     elif run_dir:
         print(f"Skipping plot generation for {dataset_name} as there's no sufficient data or valid dates.")
     return horizon_metrics, top10_nse, horizon_nse
+
 
 def main():
     import numpy as np
