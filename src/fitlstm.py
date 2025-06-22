@@ -318,10 +318,16 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     
     # Generate unique CSV filename
     csv_counter = 1
-    csv_filename = f"predictions_{csv_counter}_{target}.csv"
-    while os.path.exists(os.path.join(output_csv_dir, csv_filename)):
-        csv_counter += 1
+    if "Full Dataset" in dataset_name:
+        csv_filename = f"predictions_{csv_counter}_{target}_full_dataset.csv"
+        while os.path.exists(os.path.join(output_csv_dir, csv_filename)):
+            csv_counter += 1
+            csv_filename = f"predictions_{csv_counter}_{target}_full_dataset.csv"
+    else:
         csv_filename = f"predictions_{csv_counter}_{target}.csv"
+        while os.path.exists(os.path.join(output_csv_dir, csv_filename)):
+            csv_counter += 1
+            csv_filename = f"predictions_{csv_counter}_{target}.csv"
     
     if is_streamflow and (rating_curve_fitter is None or waterlevel_col is None):
         print(f"Error: Rating curve and waterlevel column are required for streamflow evaluation in {dataset_name}.")
@@ -351,7 +357,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     if len(t1_test_ds) > 0:
         t1_test_loader = DataLoader(t1_test_ds, batch_size=256, shuffle=False)
         t1_test_preds_raw = get_predictions(models['T+1'], t1_test_loader, device)
-        y_trues_raw_t1 = test_df[target].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+        y_trues_raw_t1 = test_df[target].iloc[lookback:].values[:len(t1_test_preds_raw)]
         if len(y_trues_raw_t1) > 0:
             dummy_true_t1 = np.zeros((len(y_trues_raw_t1), len(features)))
             dummy_pred_t1 = np.zeros((len(t1_test_preds_raw), len(features)))
@@ -364,7 +370,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
             all_predictions.extend(y_preds_inv[0])
             all_ground_truth.extend(y_trues_inv[0])
             all_horizons.extend(['T+1'] * len(y_preds_inv[0]))
-            dates_t1 = test_df['date'].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+            dates_t1 = test_df['date'].iloc[lookback:].values[:len(t1_test_preds_raw)]
             all_dates.extend(dates_t1)
             
             horizon_metrics['T+1'] = evaluate(y_trues_inv[0], y_preds_inv[0])
@@ -386,7 +392,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     rating_curve_preds_t1 = None
     if use_rating_curve and len(t1_test_preds_raw) > 0:
         try:
-            waterlevel_data = test_df[waterlevel_col].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+            waterlevel_data = test_df[waterlevel_col].iloc[lookback:].values[:len(t1_test_preds_raw)]
             rating_curve_preds_t1 = rating_curve_fitter.predict(waterlevel_data)
         except Exception as e:
             print(f"Warning: Could not generate T+1 rating curve predictions: {e}")
@@ -396,7 +402,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
         if len(t2_test_ds) > 0:
             t2_test_loader = DataLoader(t2_test_ds, batch_size=256, shuffle=False)
             t2_test_preds_raw = get_predictions(models['T+2'], t2_test_loader, device, use_rating_curve)
-            y_trues_raw_t2 = test_df[target].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
+            y_trues_raw_t2 = test_df[target].iloc[lookback+1:].values[:len(t2_test_preds_raw)]
             if len(y_trues_raw_t2) > 0:
                 dummy_true_t2 = np.zeros((len(y_trues_raw_t2), len(features)))
                 dummy_pred_t2 = np.zeros((len(t2_test_preds_raw), len(features)))
@@ -409,7 +415,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
                 all_predictions.extend(y_preds_inv[1])
                 all_ground_truth.extend(y_trues_inv[1])
                 all_horizons.extend(['T+2'] * len(y_preds_inv[1]))
-                dates_t2 = test_df['date'].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
+                dates_t2 = test_df['date'].iloc[lookback+1:].values[:len(t2_test_preds_raw)]
                 all_dates.extend(dates_t2)
                 
                 horizon_metrics['T+2'] = evaluate(y_trues_inv[1], y_preds_inv[1])
@@ -432,7 +438,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     rating_curve_preds_t2 = None
     if use_rating_curve and 't2_test_preds_raw' in locals() and len(t2_test_preds_raw) > 0:
         try:
-            waterlevel_data_t2 = test_df[waterlevel_col].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
+            waterlevel_data_t2 = test_df[waterlevel_col].iloc[lookback+1:].values[:len(t2_test_preds_raw)]
             rating_curve_preds_t2 = rating_curve_fitter.predict(waterlevel_data_t2)
         except Exception as e:
             print(f"Warning: Could not generate T+2 rating curve predictions: {e}")
@@ -443,7 +449,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
         if len(t3_test_ds) > 0:
             t3_test_loader = DataLoader(t3_test_ds, batch_size=256, shuffle=False)
             t3_test_preds_raw = get_predictions(models['T+3'], t3_test_loader, device, use_rating_curve)
-            y_trues_raw_t3 = test_df[target].iloc[lookback+2:lookback+2+len(t3_test_preds_raw)].values
+            y_trues_raw_t3 = test_df[target].iloc[lookback+2:].values[:len(t3_test_preds_raw)]
             if len(y_trues_raw_t3) > 0:
                 dummy_true_t3 = np.zeros((len(y_trues_raw_t3), len(features)))
                 dummy_pred_t3 = np.zeros((len(t3_test_preds_raw), len(features)))
@@ -456,7 +462,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
                 all_predictions.extend(y_preds_inv[2])
                 all_ground_truth.extend(y_trues_inv[2])
                 all_horizons.extend(['T+3'] * len(y_preds_inv[2]))
-                dates_t3 = test_df['date'].iloc[lookback+2:lookback+2+len(t3_test_preds_raw)].values
+                dates_t3 = test_df['date'].iloc[lookback+2:].values[:len(t3_test_preds_raw)]
                 all_dates.extend(dates_t3)
                 
                 horizon_metrics['T+3'] = evaluate(y_trues_inv[2], y_preds_inv[2])
@@ -612,6 +618,8 @@ def main():
             return
     scaler = MinMaxScaler()
     train_df[features] = scaler.fit_transform(train_df[features])
+    df[features] = scaler.transform(df[features])  # Scale the full dataset too
+
     if not first_10_df.empty:
         missing_test_cols = [col for col in features if col not in first_10_df.columns]
         if missing_test_cols:
@@ -706,8 +714,19 @@ def main():
             test_metrics['last_10_horizon_nse'] = last_10_horizon_nse
         else:
             print("Skipping evaluation for Last 10 Years due to empty or invalid data.")
+        print("\n=== Evaluating Sequential Models on Full Dataset (1961-2021) ===")
+        
+        full_dataset_metrics, full_dataset_top10_nse, full_dataset_horizon_nse = evaluate_sequential_models(
+            models, df, lookback, scaler, target, features,
+            run_dir, "Full Dataset 1961-2021", type, rating_curve_fitter, waterlevel_col
+        )
+        print("Full Dataset evaluation completed.")
+        
     else:
         print("Skipping all evaluation steps as T+1 model was not trained successfully.")
+        
+        
+        
     save_run_info(run_dir, args.desc, args, train_metrics, test_metrics, type, rating_curve_info)
     print(f"\nSequential run information saved to: {os.path.join(run_dir, 'run_info.txt')}")
     print("\n" + "="*60)

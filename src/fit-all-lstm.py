@@ -197,16 +197,16 @@ def main():
         'new_Sandia_with_hierarchical_quantiles'
     ]
     all_other_stations=[
-        "new_BamniBanjar.csv",
-        "new_Belkhedi.csv",
-        "new_Chhidgaon.csv",
-        "new_Dindori.csv",
-        "new_Gadarwara.csv",
-        "new_Handia.csv",
-        "new_Kogaon.csv",
-        "new_Patan.csv",
-        "new_Pati.csv",
-        "new_Mohgaon.csv",
+        "new_BamniBanjar",
+        "new_Belkhedi",
+        "new_Chhidgaon",
+        "new_Dindori",
+        "new_Gadarwara",
+        "new_Handia",
+        "new_Kogaon",
+        "new_Patan",
+        "new_Pati",
+        "new_Mohgaon",
     ]
     
     feature_sets = { # station feature sets here
