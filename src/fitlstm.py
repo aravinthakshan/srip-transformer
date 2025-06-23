@@ -81,7 +81,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         t1_model.train()
         epoch_loss = 0
         epoch_y_true, epoch_y_pred = [], []
-        for xb, yb in t1_train_loader:
+        for xb, rating_pred, yb in t1_train_loader:
             xb, yb = xb.to(device), yb.to(device)
             pred = t1_model(xb)
             loss = t1_criterion(pred, yb)
