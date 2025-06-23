@@ -312,20 +312,20 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     is_streamflow = 'streamflow' in target.lower()
     use_rating_curve = is_streamflow  # Add this line here
     
-    # Create output_csv directory if it doesn't exist
-    output_csv_dir = "output_csv"
-    os.makedirs(output_csv_dir, exist_ok=True)
+    # Create output_csv_2 directory if it doesn't exist
+    output_csv_2_dir = "output_csv_2"
+    os.makedirs(output_csv_2_dir, exist_ok=True)
     
     # Generate unique CSV filename
     csv_counter = 1
     if "Full Dataset" in dataset_name:
         csv_filename = f"predictions_{csv_counter}_{target}_full_dataset.csv"
-        while os.path.exists(os.path.join(output_csv_dir, csv_filename)):
+        while os.path.exists(os.path.join(output_csv_2_dir, csv_filename)):
             csv_counter += 1
             csv_filename = f"predictions_{csv_counter}_{target}_full_dataset.csv"
     else:
         csv_filename = f"predictions_{csv_counter}_{target}.csv"
-        while os.path.exists(os.path.join(output_csv_dir, csv_filename)):
+        while os.path.exists(os.path.join(output_csv_2_dir, csv_filename)):
             csv_counter += 1
             csv_filename = f"predictions_{csv_counter}_{target}.csv"
     
@@ -493,12 +493,12 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
             'dataset': [dataset_name] * len(all_predictions)
         })
         
-        csv_path = os.path.join(output_csv_dir, csv_filename)
+        csv_path = os.path.join(output_csv_2_dir, csv_filename)
         predictions_df.to_csv(csv_path, index=False)
         print(f"Predictions saved to: {csv_path}")
         
         # Update or create the mapping file
-        mapping_file = os.path.join(output_csv_dir, "csv_mapping.txt")
+        mapping_file = os.path.join(output_csv_2_dir, "csv_mapping.txt")
         with open(mapping_file, 'a') as f:
             f.write(f"{csv_filename}, {run_dir if run_dir else 'None'}\n")
         print(f"Mapping updated in: {mapping_file}")

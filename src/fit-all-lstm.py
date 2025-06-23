@@ -212,15 +212,14 @@ def main():
     feature_sets = { # station feature sets here
         'everything': [
             'rainfall', 'tmin', 'tmax', 'waterlevel_final', 'streamflow_final',
-            'Rain_cumulative_7d', 'Rain_cumulative_3d', 'hierarchical_feature_quantile_0.5',
-            'waterlevel_upstream', 'streamflow_upstream'
+            'Rain_cumulative_7d', 'Rain_cumulative_3d'
         ],
     }
     
     target_variables = ["waterlevel_final", "streamflow_final"] # target variables here
     Desc = "Everything"
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    master_output_dir = os.path.join(script_dir, f"Fit_lstm_runs_{Desc}")
+    master_output_dir = os.path.join(script_dir, f"No_Up_Fit_lstm_runs_{Desc}")
     os.makedirs(master_output_dir, exist_ok=True)
     print(f"All sequential LSTM experiment results will be saved under: {master_output_dir}")
     
@@ -232,7 +231,7 @@ def main():
         print(f"\n--- Running experiments for Feature Set: {feature_set_name} ---")
         current_feature_set_run_metrics = []
         
-        for station_file_base_name in new_station_files:
+        for station_file_base_name in all_other_stations:
             full_station_path = os.path.join(station_data_path, station_file_base_name + '.csv')
             
             if not os.path.exists(full_station_path):
