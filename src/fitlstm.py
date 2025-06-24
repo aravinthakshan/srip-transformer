@@ -73,6 +73,306 @@ def get_predictions(model, data_loader, device='cpu'):
                 raise
     
     return np.concatenate(predictions) if predictions else np.array([])
+# def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3, run_dir=None, 
+#                           lookback=7, rating_curve_fitter=None, waterlevel_col=None):
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     is_streamflow = 'streamflow' in target.lower()
+#     use_rating_curve = is_streamflow
+#     if is_streamflow and (rating_curve_fitter is None or waterlevel_col is None):
+#         print("Error: Rating curve and waterlevel column are required for streamflow prediction.")
+#         return {}, {}
+#     models = {}
+#     train_metrics = {}
+#     train_losses = {'T+1': [], 'T+2': [], 'T+3': []}
+    
+#     # Store predictions for output saving
+#     all_predictions = {}
+#     all_ground_truth = {}
+    
+#     print("=== Training T+1 Model ===")
+#     t1_model = T1LSTMModel(input_size=len(features)).to(device)
+#     t1_criterion = nn.MSELoss()
+#     t1_optimizer = torch.optim.Adam(t1_model.parameters(), lr=lr)
+#     t1_train_ds = T1Dataset(train_dfs['train'], features, target, lookback)
+#     if len(t1_train_ds) == 0:
+#         print("T+1 training dataset is empty. Skipping training for T+1 and subsequent models.")
+#         return {}, {}
+#     t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=True)
+#     best_t1_nse = -np.inf
+#     best_t1_state = None
+#     for epoch in tqdm(range(num_epochs), desc="Training T+1"):
+#         t1_model.train()
+#         epoch_loss = 0
+#         epoch_y_true, epoch_y_pred = [], []
+#         for xb, rating_pred, yb in t1_train_loader:
+#             xb, yb = xb.to(device), yb.to(device)
+#             pred = t1_model(xb)
+#             loss = t1_criterion(pred, yb)
+#             t1_optimizer.zero_grad()
+#             loss.backward()
+#             t1_optimizer.step()
+#             epoch_loss += loss.item()
+#             epoch_y_true.append(yb.detach().cpu().numpy())
+#             epoch_y_pred.append(pred.detach().cpu().numpy())
+#         avg_loss = epoch_loss / len(t1_train_loader)
+#         train_losses['T+1'].append(avg_loss)
+#         if (epoch + 1) % 5 == 0 or epoch == num_epochs - 1:
+#             if epoch_y_true and epoch_y_pred:
+#                 y_true = np.concatenate(epoch_y_true)
+#                 y_pred = np.concatenate(epoch_y_pred)
+#                 train_nse = nse(y_true, y_pred)
+#                 if train_nse > best_t1_nse:
+#                     best_t1_nse = train_nse
+#                     best_t1_state = t1_model.state_dict().copy()
+#                 print(f"T+1 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
+#     if best_t1_state is not None:
+#         t1_model.load_state_dict(best_t1_state)
+#     if epoch_y_true and epoch_y_pred:
+#         y_true = np.concatenate(epoch_y_true)
+#         y_pred = np.concatenate(epoch_y_pred)
+#         train_metrics['T+1'] = evaluate(y_true, y_pred)
+#         # Store final epoch predictions
+#         all_predictions['T+1'] = y_pred
+#         all_ground_truth['T+1'] = y_true
+#     else:
+#         train_metrics['T+1'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
+#     models['T+1'] = t1_model
+#     t1_train_preds = get_predictions(t1_model, t1_train_loader, device)
+#     if len(t1_train_preds) == 0:
+#         print("T+1 predictions for training T+2 are empty. Skipping T+2 and T+3 training.")
+#         return models, train_metrics
+    
+#     rating_curve_preds_t1 = None
+#     if use_rating_curve:
+#         print("Generating rating curve predictions for T+2 training...")
+#         try:
+#             waterlevel_data = train_dfs['train'][waterlevel_col].iloc[lookback:lookback+len(t1_train_preds)].values
+#             rating_curve_preds_t1 = rating_curve_fitter.predict(waterlevel_data)
+#         except Exception as e:
+#             print(f"Warning: Could not generate rating curve predictions: {e}")
+#             use_rating_curve = False
+    
+#     print("\n=== Training T+2 Model ===")
+#     t2_model = T2LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
+#     t2_criterion = nn.MSELoss()
+#     t2_optimizer = torch.optim.Adam(t2_model.parameters(), lr=lr)
+#     t2_train_ds = T2Dataset(train_dfs['train'], features, target, t1_train_preds, 
+#                        rating_curve_preds_t1, lookback)
+#     if len(t2_train_ds) == 0:
+#         print("T+2 training dataset is empty. Skipping training for T+2 and T+3 models.")
+#         return models, train_metrics
+#     t2_train_loader = DataLoader(t2_train_ds, batch_size=256, shuffle=True)
+#     best_t2_nse = -np.inf
+#     best_t2_state = None
+#     for epoch in tqdm(range(num_epochs), desc="Training T+2"):
+#         t2_model.train()
+#         epoch_loss = 0
+#         epoch_y_true, epoch_y_pred = [], []
+#         for batch in t2_train_loader:
+#             if use_rating_curve:
+#                 xb, t1_pred, rating_pred, yb = batch
+#                 xb, t1_pred, rating_pred, yb = xb.to(device), t1_pred.to(device), rating_pred.to(device), yb.to(device)
+#                 pred = t2_model(xb, t1_pred, rating_pred)
+#             else:
+#                 xb, t1_pred, _, yb = batch  # Ignore the dummy rating prediction
+#                 xb, t1_pred, yb = xb.to(device), t1_pred.to(device), yb.to(device)
+#                 pred = t2_model(xb, t1_pred)
+#             loss = t2_criterion(pred, yb)
+#             t2_optimizer.zero_grad()
+#             loss.backward()
+#             t2_optimizer.step()
+#             epoch_loss += loss.item()
+#             epoch_y_true.append(yb.detach().cpu().numpy())
+#             epoch_y_pred.append(pred.detach().cpu().numpy())
+#         avg_loss = epoch_loss / len(t2_train_loader)
+#         train_losses['T+2'].append(avg_loss)
+#         if (epoch + 1) % 5 == 0 or epoch == num_epochs - 1:
+#             if epoch_y_true and epoch_y_pred:
+#                 y_true = np.concatenate(epoch_y_true)
+#                 y_pred = np.concatenate(epoch_y_pred)
+#                 train_nse = nse(y_true, y_pred)
+#                 if train_nse > best_t2_nse:
+#                     best_t2_nse = train_nse
+#                     best_t2_state = t2_model.state_dict().copy()
+#                 print(f"T+2 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
+#     if best_t2_state is not None:
+#         t2_model.load_state_dict(best_t2_state)
+#     if epoch_y_true and epoch_y_pred:
+#         y_true = np.concatenate(epoch_y_true)
+#         y_pred = np.concatenate(epoch_y_pred)
+#         train_metrics['T+2'] = evaluate(y_true, y_pred)
+#         all_predictions['T+2'] = y_pred
+#         all_ground_truth['T+2'] = y_true
+#     else:
+#         train_metrics['T+2'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
+#     models['T+2'] = t2_model
+#     t2_train_preds = get_predictions(t2_model, t2_train_loader, device)
+#     if len(t2_train_preds) == 0:
+#         print("T+2 predictions for training T+3 are empty. Skipping T+3 training.")
+#         return models, train_metrics
+    
+#     rating_curve_preds_t2 = None
+#     if use_rating_curve:
+#         print("Generating rating curve predictions for T+3 training...")
+#         try:
+#             waterlevel_data_t2 = train_dfs['train'][waterlevel_col].iloc[lookback+1:lookback+1+len(t2_train_preds)].values
+#             rating_curve_preds_t2 = rating_curve_fitter.predict(waterlevel_data_t2)
+#         except Exception as e:
+#             print(f"Warning: Could not generate T+2 rating curve predictions: {e}")
+#             rating_curve_preds_t2 = None
+    
+#     print("\n=== Training T+3 Model ===")
+#     t3_model = T3LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
+#     t3_criterion = nn.MSELoss()
+#     t3_optimizer = torch.optim.Adam(t3_model.parameters(), lr=lr)
+#     t3_train_ds = T3Dataset(train_dfs['train'], features, target, t1_train_preds, t2_train_preds,
+#                         rating_curve_preds_t1, rating_curve_preds_t2, lookback)
+#     if len(t3_train_ds) == 0:
+#         print("T+3 training dataset is empty. Skipping T+3 training.")
+#         return models, train_metrics
+#     t3_train_loader = DataLoader(t3_train_ds, batch_size=256, shuffle=True)
+#     best_t3_nse = -np.inf
+#     best_t3_state = None
+#     for epoch in tqdm(range(num_epochs), desc="Training T+3"):
+#         t3_model.train()
+#         epoch_loss = 0
+#         epoch_y_true, epoch_y_pred = [], []
+#         for batch in t3_train_loader:
+#             if use_rating_curve:
+#                 xb, t1_pred, t2_pred, rating_t1, rating_t2, yb = batch
+#                 xb = xb.to(device)
+#                 t1_pred, t2_pred = t1_pred.to(device), t2_pred.to(device)
+#                 rating_t1, rating_t2 = rating_t1.to(device), rating_t2.to(device)
+#                 yb = yb.to(device)
+#                 pred = t3_model(xb, t1_pred, t2_pred, rating_t1, rating_t2)
+#             else:
+#                 xb, t1_pred, t2_pred, _, _, yb = batch  # Ignore dummy rating predictions
+#                 xb = xb.to(device)
+#                 t1_pred, t2_pred = t1_pred.to(device), t2_pred.to(device)
+#                 yb = yb.to(device)
+#                 pred = t3_model(xb, t1_pred, t2_pred)
+#             loss = t3_criterion(pred, yb)
+#             t3_optimizer.zero_grad()
+#             loss.backward()
+#             t3_optimizer.step()
+#             epoch_loss += loss.item()
+#             epoch_y_true.append(yb.detach().cpu().numpy())
+#             epoch_y_pred.append(pred.detach().cpu().numpy())
+#         avg_loss = epoch_loss / len(t3_train_loader)
+#         train_losses['T+3'].append(avg_loss)
+#         if (epoch + 1) % 5 == 0 or epoch == num_epochs - 1:
+#             if epoch_y_true and epoch_y_pred:
+#                 y_true = np.concatenate(epoch_y_true)
+#                 y_pred = np.concatenate(epoch_y_pred)
+#                 train_nse = nse(y_true, y_pred)
+#                 if train_nse > best_t3_nse:
+#                     best_t3_nse = train_nse
+#                     best_t3_state = t3_model.state_dict().copy()
+#                 print(f"T+3 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
+#     if best_t3_state is not None:
+#         t3_model.load_state_dict(best_t3_state)
+#     if epoch_y_true and epoch_y_pred:
+#         y_true = np.concatenate(epoch_y_true)
+#         y_pred = np.concatenate(epoch_y_pred)
+#         train_metrics['T+3'] = evaluate(y_true, y_pred)
+#         all_predictions['T+3'] = y_pred
+#         all_ground_truth['T+3'] = y_true
+#     else:
+#         train_metrics['T+3'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
+#     models['T+3'] = t3_model
+    
+#     if run_dir:
+#         # Save models
+#         for horizon, model in models.items():
+#             torch.save(model.state_dict(), os.path.join(run_dir, f"{horizon.replace('+', '')}_model.pth"))
+        
+#         # Create train_output folder
+#         train_output_dir = os.path.join(run_dir, 'train_output')
+#         os.makedirs(train_output_dir, exist_ok=True)
+        
+#         # Save training predictions and ground truth
+#         all_data = []
+#         for horizon in ['T+1', 'T+2', 'T+3']:
+#             if horizon in all_predictions:
+#                 pred_data = all_predictions[horizon].flatten()
+#                 gt_data = all_ground_truth[horizon].flatten()
+                
+#                 # Generate dates (assuming sequential daily data starting from training start)
+#                 # You may need to adjust this based on your actual date handling
+#                 n_samples = len(pred_data)
+#                 base_date = pd.Timestamp('2020-01-01')  # Adjust this to your actual start date
+#                 dates = [base_date + pd.Timedelta(days=i) for i in range(n_samples)]
+                
+#                 for i in range(n_samples):
+#                     all_data.append({
+#                         'date': dates[i].strftime('%Y-%m-%d'),
+#                         'horizon': horizon,
+#                         'predicted': pred_data[i],
+#                         'ground_truth': gt_data[i],
+#                         'dataset': 'Middle Ywards'
+#                     })
+        
+#         # Save predictions CSV
+#         if all_data:
+#             df_output = pd.DataFrame(all_data)
+#             csv_filename = 'training_predictions.csv'
+#             df_output.to_csv(os.path.join(train_output_dir, csv_filename), index=False)
+#             print(f"Training predictions saved to: {os.path.join(train_output_dir, csv_filename)}")
+            
+#             # Create/update mapping file
+#             mapping_file = 'run_mapping.txt'
+#             mapping_path = os.path.join(os.path.dirname(run_dir), mapping_file)
+            
+#             # Read existing mappings if file exists
+#             existing_mappings = {}
+#             if os.path.exists(mapping_path):
+#                 with open(mapping_path, 'r') as f:
+#                     for line in f:
+#                         line = line.strip()
+#                         if line and ',' in line:
+#                             csv_name, run_path = line.split(',', 1)
+#                             existing_mappings[csv_name] = run_path
+            
+#             # Add new mapping
+#             existing_mappings[csv_filename] = run_dir
+            
+#             # Write updated mappings
+#             with open(mapping_path, 'w') as f:
+#                 f.write("csv_filename,run_dir\n")
+#                 for csv_name, run_path in existing_mappings.items():
+#                     f.write(f"{csv_name},{run_path}\n")
+            
+#             print(f"Mapping file updated: {mapping_path}")
+        
+#         # Save training loss plots
+#         plt.figure(figsize=(15, 5))
+#         plt.subplot(1, 3, 1)
+#         plt.plot(train_losses['T+1'])
+#         plt.title('Training Loss - T+1 LSTM')
+#         plt.xlabel('Epoch')
+#         plt.ylabel('MSE Loss')
+#         plt.grid(True)
+#         plt.subplot(1, 3, 2)
+#         plt.plot(train_losses['T+2'])
+#         plt.title('Training Loss - T+2 LSTM')
+#         plt.xlabel('Epoch')
+#         plt.ylabel('MSE Loss')
+#         plt.grid(True)
+#         plt.subplot(1, 3, 3)
+#         plt.plot(train_losses['T+3'])
+#         plt.title('Training Loss - T+3 LSTM')
+#         plt.xlabel('Epoch')
+#         plt.ylabel('MSE Loss')
+#         plt.grid(True)
+#         plt.tight_layout()
+#         plt.savefig(os.path.join(run_dir, 'training_losses_sequential.png'), dpi=300, bbox_inches='tight')
+#         plt.close()
+    
+#     print("Training completed!")
+#     return models, train_metrics
 
 def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3, run_dir=None, 
                           lookback=7, rating_curve_fitter=None, waterlevel_col=None):
@@ -85,6 +385,11 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     models = {}
     train_metrics = {}
     train_losses = {'T+1': [], 'T+2': [], 'T+3': []}
+    
+    # Store predictions for output saving
+    all_predictions = {}
+    all_ground_truth = {}
+    
     print("=== Training T+1 Model ===")
     t1_model = T1LSTMModel(input_size=len(features)).to(device)
     t1_criterion = nn.MSELoss()
@@ -121,12 +426,16 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t1_nse = train_nse
                     best_t1_state = t1_model.state_dict().copy()
                 print(f"T+1 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
     if best_t1_state is not None:
         t1_model.load_state_dict(best_t1_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+1'] = evaluate(y_true, y_pred)
+        # Store final epoch predictions
+        all_predictions['T+1'] = y_pred
+        all_ground_truth['T+1'] = y_true
     else:
         train_metrics['T+1'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+1'] = t1_model
@@ -134,6 +443,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t1_train_preds) == 0:
         print("T+1 predictions for training T+2 are empty. Skipping T+2 and T+3 training.")
         return models, train_metrics
+    
     rating_curve_preds_t1 = None
     if use_rating_curve:
         print("Generating rating curve predictions for T+2 training...")
@@ -143,6 +453,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         except Exception as e:
             print(f"Warning: Could not generate rating curve predictions: {e}")
             use_rating_curve = False
+    
     print("\n=== Training T+2 Model ===")
     t2_model = T2LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
     t2_criterion = nn.MSELoss()
@@ -186,12 +497,15 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t2_nse = train_nse
                     best_t2_state = t2_model.state_dict().copy()
                 print(f"T+2 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
     if best_t2_state is not None:
         t2_model.load_state_dict(best_t2_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+2'] = evaluate(y_true, y_pred)
+        all_predictions['T+2'] = y_pred
+        all_ground_truth['T+2'] = y_true
     else:
         train_metrics['T+2'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+2'] = t2_model
@@ -199,6 +513,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t2_train_preds) == 0:
         print("T+2 predictions for training T+3 are empty. Skipping T+3 training.")
         return models, train_metrics
+    
     rating_curve_preds_t2 = None
     if use_rating_curve:
         print("Generating rating curve predictions for T+3 training...")
@@ -208,6 +523,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         except Exception as e:
             print(f"Warning: Could not generate T+2 rating curve predictions: {e}")
             rating_curve_preds_t2 = None
+    
     print("\n=== Training T+3 Model ===")
     t3_model = T3LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
     t3_criterion = nn.MSELoss()
@@ -256,18 +572,84 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t3_nse = train_nse
                     best_t3_state = t3_model.state_dict().copy()
                 print(f"T+3 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
+    
     if best_t3_state is not None:
         t3_model.load_state_dict(best_t3_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+3'] = evaluate(y_true, y_pred)
+        all_predictions['T+3'] = y_pred
+        all_ground_truth['T+3'] = y_true
     else:
         train_metrics['T+3'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+3'] = t3_model
+    
+    # Hardcoded output path - modify as needed
+    OUTPUT_BASE_PATH = "train_outputs/"  # CHANGE THIS PATH
+    
     if run_dir:
+        # Save models in run_dir
         for horizon, model in models.items():
             torch.save(model.state_dict(), os.path.join(run_dir, f"{horizon.replace('+', '')}_model.pth"))
+        
+        # Create common output directory
+        os.makedirs(OUTPUT_BASE_PATH, exist_ok=True)
+        
+        # Save training predictions and ground truth
+        all_data = []
+        for horizon in ['T+1', 'T+2', 'T+3']:
+            if horizon in all_predictions:
+                pred_data = all_predictions[horizon].flatten()
+                gt_data = all_ground_truth[horizon].flatten()
+                
+                n_samples = len(pred_data)
+                base_date = pd.Timestamp('2020-01-01')  # Adjust this to your actual start date
+                dates = [base_date + pd.Timedelta(days=i) for i in range(n_samples)]
+                
+                for i in range(n_samples):
+                    all_data.append({
+                        'date': dates[i].strftime('%Y-%m-%d'),
+                        'horizon': horizon,
+                        'predicted': pred_data[i],
+                        'ground_truth': gt_data[i],
+                        'dataset': 'Middle Ywards'
+                    })
+        
+        # Save predictions CSV with unique filename
+        if all_data:
+            df_output = pd.DataFrame(all_data)
+            timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+            csv_filename = f'training_predictions_{timestamp}.csv'
+            csv_path = os.path.join(OUTPUT_BASE_PATH, csv_filename)
+            df_output.to_csv(csv_path, index=False)
+            print(f"Training predictions saved to: {csv_path}")
+            
+            # Create/update mapping file
+            mapping_file = os.path.join(OUTPUT_BASE_PATH, 'run_mapping.txt')
+            
+            # Read existing mappings if file exists
+            existing_mappings = {}
+            if os.path.exists(mapping_file):
+                with open(mapping_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and ',' in line:
+                            csv_name, run_path = line.split(',', 1)
+                            existing_mappings[csv_name] = run_path
+            
+            # Add new mapping
+            existing_mappings[csv_filename] = run_dir
+            
+            # Write updated mappings
+            with open(mapping_file, 'w') as f:
+                f.write("csv_filename,run_dir\n")
+                for csv_name, run_path in existing_mappings.items():
+                    f.write(f"{csv_name},{run_path}\n")
+            
+            print(f"Mapping file updated: {mapping_file}")
+        
+        # Save training loss plots
         plt.figure(figsize=(15, 5))
         plt.subplot(1, 3, 1)
         plt.plot(train_losses['T+1'])
@@ -290,6 +672,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         plt.tight_layout()
         plt.savefig(os.path.join(run_dir, 'training_losses_sequential.png'), dpi=300, bbox_inches='tight')
         plt.close()
+    
     print("Training completed!")
     return models, train_metrics
 
