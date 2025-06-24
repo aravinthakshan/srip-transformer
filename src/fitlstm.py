@@ -23,56 +23,37 @@ from misc import create_run_directory, save_run_info
         
 ### ------------------------ evaluation and training scripts ------------------------ ###
 
-def get_predictions(model, data_loader, device='cpu'):
+def get_predictions(model, data_loader, device='cpu', use_rating_curve=False):
     model.eval()
     predictions = []
-    
     with torch.no_grad():
         for batch in data_loader:
             try:
-                if len(batch) == 3:  # T1Dataset: (x, rating_pred, y)
-                    x, rating_pred, _ = batch
-                    x = x.to(device)
-                    rating_pred = rating_pred.to(device)
-                    
-                    # Check if model uses rating curve
-                    if hasattr(model, 'use_rating_curve') and model.use_rating_curve:
-                        pred = model(x, rating_pred)
-                    else:
-                        pred = model(x)
-                        
-                elif len(batch) == 4:  # T2Dataset: (x, t1_pred, rating_pred, y)
+                if len(batch) == 2:  # T+1
+                    x, _ = batch
+                    pred = model(x.to(device))
+                elif len(batch) == 4:  # T+2
                     x, t1_pred, rating_pred, _ = batch
-                    x, t1_pred = x.to(device), t1_pred.to(device)
-                    rating_pred = rating_pred.to(device)
-                    
-                    if hasattr(model, 'use_rating_curve') and model.use_rating_curve:
-                        pred = model(x, t1_pred, rating_pred)
+                    if use_rating_curve:
+                        pred = model(x.to(device), t1_pred.to(device), rating_pred.to(device))
                     else:
-                        pred = model(x, t1_pred)
-                        
-                elif len(batch) == 6:  # T3Dataset: (x, t1_pred, t2_pred, rating_t1, rating_t2, y)
+                        pred = model(x.to(device), t1_pred.to(device))
+                elif len(batch) == 6:  # T+3
                     x, t1_pred, t2_pred, rating_t1, rating_t2, _ = batch
-                    x = x.to(device)
-                    t1_pred, t2_pred = t1_pred.to(device), t2_pred.to(device)
-                    rating_t1, rating_t2 = rating_t1.to(device), rating_t2.to(device)
-                    
-                    if hasattr(model, 'use_rating_curve') and model.use_rating_curve:
-                        pred = model(x, t1_pred, t2_pred, rating_t1, rating_t2)
+                    if use_rating_curve:
+                        pred = model(x.to(device), t1_pred.to(device), t2_pred.to(device), 
+                                    rating_t1.to(device), rating_t2.to(device))
                     else:
-                        pred = model(x, t1_pred, t2_pred)
-                        
+                        pred = model(x.to(device), t1_pred.to(device), t2_pred.to(device))
                 else:
-                    raise ValueError(f"Unexpected batch format. Expected 3, 4, or 6 items, got {len(batch)}")
-                    
+                    raise ValueError(f"Unexpected batch format. Got length {len(batch)}")
+                
                 predictions.append(pred.cpu().numpy())
                 
             except Exception as e:
                 print(f"Error in get_predictions: {e}")
-                print(f"Batch type: {type(batch)}, Batch length: {len(batch) if hasattr(batch, '__len__') else 'No length'}")
                 raise
-    
-    return np.concatenate(predictions) if predictions else np.array([])
+    return np.concatenate(predictions)
 
 def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3, run_dir=None, 
                           lookback=7, rating_curve_fitter=None, waterlevel_col=None):
@@ -85,11 +66,6 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     models = {}
     train_metrics = {}
     train_losses = {'T+1': [], 'T+2': [], 'T+3': []}
-    
-    # Store predictions for output saving
-    all_predictions = {}
-    all_ground_truth = {}
-    
     print("=== Training T+1 Model ===")
     t1_model = T1LSTMModel(input_size=len(features)).to(device)
     t1_criterion = nn.MSELoss()
@@ -105,7 +81,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         t1_model.train()
         epoch_loss = 0
         epoch_y_true, epoch_y_pred = [], []
-        for xb, rating_pred, yb in t1_train_loader:
+        for xb, yb in t1_train_loader:
             xb, yb = xb.to(device), yb.to(device)
             pred = t1_model(xb)
             loss = t1_criterion(pred, yb)
@@ -126,16 +102,12 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t1_nse = train_nse
                     best_t1_state = t1_model.state_dict().copy()
                 print(f"T+1 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
-    
     if best_t1_state is not None:
         t1_model.load_state_dict(best_t1_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+1'] = evaluate(y_true, y_pred)
-        # Store final epoch predictions
-        all_predictions['T+1'] = y_pred
-        all_ground_truth['T+1'] = y_true
     else:
         train_metrics['T+1'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+1'] = t1_model
@@ -143,7 +115,6 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t1_train_preds) == 0:
         print("T+1 predictions for training T+2 are empty. Skipping T+2 and T+3 training.")
         return models, train_metrics
-    
     rating_curve_preds_t1 = None
     if use_rating_curve:
         print("Generating rating curve predictions for T+2 training...")
@@ -153,7 +124,6 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         except Exception as e:
             print(f"Warning: Could not generate rating curve predictions: {e}")
             use_rating_curve = False
-    
     print("\n=== Training T+2 Model ===")
     t2_model = T2LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
     t2_criterion = nn.MSELoss()
@@ -197,23 +167,19 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t2_nse = train_nse
                     best_t2_state = t2_model.state_dict().copy()
                 print(f"T+2 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
-    
     if best_t2_state is not None:
         t2_model.load_state_dict(best_t2_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+2'] = evaluate(y_true, y_pred)
-        all_predictions['T+2'] = y_pred
-        all_ground_truth['T+2'] = y_true
     else:
         train_metrics['T+2'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+2'] = t2_model
-    t2_train_preds = get_predictions(t2_model, t2_train_loader, device)
+    t2_train_preds = get_predictions(t2_model, t2_train_loader, device, use_rating_curve)
     if len(t2_train_preds) == 0:
         print("T+2 predictions for training T+3 are empty. Skipping T+3 training.")
         return models, train_metrics
-    
     rating_curve_preds_t2 = None
     if use_rating_curve:
         print("Generating rating curve predictions for T+3 training...")
@@ -223,7 +189,6 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         except Exception as e:
             print(f"Warning: Could not generate T+2 rating curve predictions: {e}")
             rating_curve_preds_t2 = None
-    
     print("\n=== Training T+3 Model ===")
     t3_model = T3LSTMModel(input_size=len(features), use_rating_curve=use_rating_curve).to(device)
     t3_criterion = nn.MSELoss()
@@ -272,84 +237,18 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
                     best_t3_nse = train_nse
                     best_t3_state = t3_model.state_dict().copy()
                 print(f"T+3 Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f}, NSE: {train_nse:.4f}")
-    
     if best_t3_state is not None:
         t3_model.load_state_dict(best_t3_state)
     if epoch_y_true and epoch_y_pred:
         y_true = np.concatenate(epoch_y_true)
         y_pred = np.concatenate(epoch_y_pred)
         train_metrics['T+3'] = evaluate(y_true, y_pred)
-        all_predictions['T+3'] = y_pred
-        all_ground_truth['T+3'] = y_true
     else:
         train_metrics['T+3'] = {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan}
     models['T+3'] = t3_model
-    
-    # Hardcoded output path - modify as needed
-    OUTPUT_BASE_PATH = "train_outputs/"  # CHANGE THIS PATH
-    
     if run_dir:
-        # Save models in run_dir
         for horizon, model in models.items():
             torch.save(model.state_dict(), os.path.join(run_dir, f"{horizon.replace('+', '')}_model.pth"))
-        
-        # Create common output directory
-        os.makedirs(OUTPUT_BASE_PATH, exist_ok=True)
-        
-        # Save training predictions and ground truth
-        all_data = []
-        for horizon in ['T+1', 'T+2', 'T+3']:
-            if horizon in all_predictions:
-                pred_data = all_predictions[horizon].flatten()
-                gt_data = all_ground_truth[horizon].flatten()
-                
-                n_samples = len(pred_data)
-                base_date = pd.Timestamp('2020-01-01')  # Adjust this to your actual start date
-                dates = [base_date + pd.Timedelta(days=i) for i in range(n_samples)]
-                
-                for i in range(n_samples):
-                    all_data.append({
-                        'date': dates[i].strftime('%Y-%m-%d'),
-                        'horizon': horizon,
-                        'predicted': pred_data[i],
-                        'ground_truth': gt_data[i],
-                        'dataset': 'Middle Ywards'
-                    })
-        
-        # Save predictions CSV with unique filename
-        if all_data:
-            df_output = pd.DataFrame(all_data)
-            timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-            csv_filename = f'training_predictions_{timestamp}.csv'
-            csv_path = os.path.join(OUTPUT_BASE_PATH, csv_filename)
-            df_output.to_csv(csv_path, index=False)
-            print(f"Training predictions saved to: {csv_path}")
-            
-            # Create/update mapping file
-            mapping_file = os.path.join(OUTPUT_BASE_PATH, 'run_mapping.txt')
-            
-            # Read existing mappings if file exists
-            existing_mappings = {}
-            if os.path.exists(mapping_file):
-                with open(mapping_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and ',' in line:
-                            csv_name, run_path = line.split(',', 1)
-                            existing_mappings[csv_name] = run_path
-            
-            # Add new mapping
-            existing_mappings[csv_filename] = run_dir
-            
-            # Write updated mappings
-            with open(mapping_file, 'w') as f:
-                f.write("csv_filename,run_dir\n")
-                for csv_name, run_path in existing_mappings.items():
-                    f.write(f"{csv_name},{run_path}\n")
-            
-            print(f"Mapping file updated: {mapping_file}")
-        
-        # Save training loss plots
         plt.figure(figsize=(15, 5))
         plt.subplot(1, 3, 1)
         plt.plot(train_losses['T+1'])
@@ -372,9 +271,170 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         plt.tight_layout()
         plt.savefig(os.path.join(run_dir, 'training_losses_sequential.png'), dpi=300, bbox_inches='tight')
         plt.close()
-    
     print("Training completed!")
     return models, train_metrics
+
+# def evaluate_sequential_models(models, test_df, lookback, scaler, target, features, run_dir=None, 
+#                              dataset_name="", type=None, rating_curve_fitter=None, waterlevel_col=None):
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     is_streamflow = 'streamflow' in target.lower()
+#     use_rating_curve = is_streamflow  # Add this line here
+#     if is_streamflow and (rating_curve_fitter is None or waterlevel_col is None):
+#         print(f"Error: Rating curve and waterlevel column are required for streamflow evaluation in {dataset_name}.")
+#         return horizon_metrics, top10_nse, horizon_nse
+#     for model in models.values():
+#         model.to(device)
+#         model.eval()
+#     horizon_metrics = {f'T+{i+1}': {'NSE': np.nan, 'R2': np.nan, 'PBIAS': np.nan, 'KGE': np.nan} for i in range(3)}
+#     horizon_nse = [np.nan, np.nan, np.nan]
+#     top10_nse = [np.nan, np.nan, np.nan]
+#     y_trues_inv = [np.array([]), np.array([]), np.array([])]
+#     y_preds_inv = [np.array([]), np.array([]), np.array([])]
+#     dates = np.array([])
+#     try:
+#         target_idx = features.index(target)
+#     except ValueError:
+#         print(f"Error: Target variable '{target}' not found in the features list used for scaling. Cannot evaluate.")
+#         return horizon_metrics, top10_nse, horizon_nse
+#     t1_test_ds = T1Dataset(test_df, features, target, lookback)
+#     if len(t1_test_ds) > 0:
+#         t1_test_loader = DataLoader(t1_test_ds, batch_size=256, shuffle=False)
+#         t1_test_preds_raw = get_predictions(models['T+1'], t1_test_loader, device)
+#         y_trues_raw_t1 = test_df[target].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+#         if len(y_trues_raw_t1) > 0:
+#             dummy_true_t1 = np.zeros((len(y_trues_raw_t1), len(features)))
+#             dummy_pred_t1 = np.zeros((len(t1_test_preds_raw), len(features)))
+#             dummy_true_t1[:, target_idx] = y_trues_raw_t1
+#             dummy_pred_t1[:, target_idx] = t1_test_preds_raw
+#             y_trues_inv[0] = scaler.inverse_transform(dummy_true_t1)[:, target_idx]
+#             y_preds_inv[0] = scaler.inverse_transform(dummy_pred_t1)[:, target_idx]
+#             horizon_metrics['T+1'] = evaluate(y_trues_inv[0], y_preds_inv[0])
+#             horizon_nse[0] = horizon_metrics['T+1']['NSE']
+#             print(f"NSE for T+1 ({dataset_name}): {horizon_nse[0]:.4f}")
+#             if len(y_trues_inv[0]) > 0:
+#                 threshold_t1 = np.percentile(y_trues_inv[0], 90)
+#                 high_idx_t1 = y_trues_inv[0] >= threshold_t1
+#                 if np.sum(high_idx_t1) > 0:
+#                     top10_nse[0] = nse(y_trues_inv[0][high_idx_t1], y_preds_inv[0][high_idx_t1])
+#                     print(f"Top 10% NSE for T+1 ({dataset_name}): {top10_nse[0]:.4f}")
+#                 else:
+#                     print(f"No values found in top 10% for T+1 ({dataset_name}).")
+#             dates = test_df['date'].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+#         else:
+#             print(f"Not enough data to evaluate T+1 for {dataset_name}.")
+#     else:
+#         print(f"T+1 test dataset is empty for {dataset_name}.")
+#     rating_curve_preds_t1 = None
+#     if use_rating_curve and len(t1_test_preds_raw) > 0:
+#         try:
+#             waterlevel_data = test_df[waterlevel_col].iloc[lookback:lookback+len(t1_test_preds_raw)].values
+#             rating_curve_preds_t1 = rating_curve_fitter.predict(waterlevel_data)
+#         except Exception as e:
+#             print(f"Warning: Could not generate T+1 rating curve predictions: {e}")
+#             use_rating_curve = False
+#     if len(t1_test_preds_raw) > 0:
+#         t2_test_ds = T2Dataset(test_df, features, target, t1_test_preds_raw, rating_curve_preds_t1, lookback)
+#         if len(t2_test_ds) > 0:
+#             t2_test_loader = DataLoader(t2_test_ds, batch_size=256, shuffle=False)
+#             t2_test_preds_raw = get_predictions(models['T+2'], t2_test_loader, device, use_rating_curve)
+#             y_trues_raw_t2 = test_df[target].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
+#             if len(y_trues_raw_t2) > 0:
+#                 dummy_true_t2 = np.zeros((len(y_trues_raw_t2), len(features)))
+#                 dummy_pred_t2 = np.zeros((len(t2_test_preds_raw), len(features)))
+#                 dummy_true_t2[:, target_idx] = y_trues_raw_t2
+#                 dummy_pred_t2[:, target_idx] = t2_test_preds_raw
+#                 y_trues_inv[1] = scaler.inverse_transform(dummy_true_t2)[:, target_idx]
+#                 y_preds_inv[1] = scaler.inverse_transform(dummy_pred_t2)[:, target_idx]
+#                 horizon_metrics['T+2'] = evaluate(y_trues_inv[1], y_preds_inv[1])
+#                 horizon_nse[1] = horizon_metrics['T+2']['NSE']
+#                 print(f"NSE for T+2 ({dataset_name}): {horizon_nse[1]:.4f}")
+#                 if len(y_trues_inv[1]) > 0:
+#                     threshold_t2 = np.percentile(y_trues_inv[1], 90)
+#                     high_idx_t2 = y_trues_inv[1] >= threshold_t2
+#                     if np.sum(high_idx_t2) > 0:
+#                         top10_nse[1] = nse(y_trues_inv[1][high_idx_t2], y_preds_inv[1][high_idx_t2])
+#                         print(f"Top 10% NSE for T+2 ({dataset_name}): {top10_nse[1]:.4f}")
+#                     else:
+#                         print(f"No values found in top 10% for T+2 ({dataset_name}).")
+#             else:
+#                 print(f"Not enough data to evaluate T+2 for {dataset_name}.")
+#         else:
+#             print(f"T+2 test dataset is empty for {dataset_name}.")
+#     else:
+#         print(f"T+1 predictions were not available for T+2 evaluation for {dataset_name}.")
+#     rating_curve_preds_t2 = None
+#     if use_rating_curve and 't2_test_preds_raw' in locals() and len(t2_test_preds_raw) > 0:
+#         try:
+#             waterlevel_data_t2 = test_df[waterlevel_col].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
+#             rating_curve_preds_t2 = rating_curve_fitter.predict(waterlevel_data_t2)
+#         except Exception as e:
+#             print(f"Warning: Could not generate T+2 rating curve predictions: {e}")
+#             rating_curve_preds_t2 = None
+#     if 't2_test_preds_raw' in locals() and len(t2_test_preds_raw) > 0:
+#         t3_test_ds = T3Dataset(test_df, features, target, t1_test_preds_raw, t2_test_preds_raw, 
+#                              rating_curve_preds_t1, rating_curve_preds_t2, lookback)
+#         if len(t3_test_ds) > 0:
+#             t3_test_loader = DataLoader(t3_test_ds, batch_size=256, shuffle=False)
+#             t3_test_preds_raw = get_predictions(models['T+3'], t3_test_loader, device, use_rating_curve)
+#             y_trues_raw_t3 = test_df[target].iloc[lookback+2:lookback+2+len(t3_test_preds_raw)].values
+#             if len(y_trues_raw_t3) > 0:
+#                 dummy_true_t3 = np.zeros((len(y_trues_raw_t3), len(features)))
+#                 dummy_pred_t3 = np.zeros((len(t3_test_preds_raw), len(features)))
+#                 dummy_true_t3[:, target_idx] = y_trues_raw_t3
+#                 dummy_pred_t3[:, target_idx] = t3_test_preds_raw
+#                 y_trues_inv[2] = scaler.inverse_transform(dummy_true_t3)[:, target_idx]
+#                 y_preds_inv[2] = scaler.inverse_transform(dummy_pred_t3)[:, target_idx]
+#                 horizon_metrics['T+3'] = evaluate(y_trues_inv[2], y_preds_inv[2])
+#                 horizon_nse[2] = horizon_metrics['T+3']['NSE']
+#                 print(f"NSE for T+3 ({dataset_name}): {horizon_nse[2]:.4f}")
+#                 if len(y_trues_inv[2]) > 0:
+#                     threshold_t3 = np.percentile(y_trues_inv[2], 90)
+#                     high_idx_t3 = y_trues_inv[2] >= threshold_t3
+#                     if np.sum(high_idx_t3) > 0:
+#                         top10_nse[2] = nse(y_trues_inv[2][high_idx_t3], y_preds_inv[2][high_idx_t3])
+#                         print(f"Top 10% NSE for T+3 ({dataset_name}): {top10_nse[2]:.4f}")
+#                     else:
+#                         print(f"No values found in top 10% for T+3 ({dataset_name}).")
+#             else:
+#                 print(f"Not enough data to evaluate T+3 for {dataset_name}.")
+#         else:
+#             print(f"T+3 test dataset is empty for {dataset_name}.")
+#     else:
+#         print(f"T+2 predictions were not available for T+3 evaluation for {dataset_name}.")
+#     print(f"\nDetailed Metrics for {dataset_name}:")
+#     for horizon, metrics in horizon_metrics.items():
+#         print(f"{horizon}:")
+#         for k, v in metrics.items():
+#             print(f"    {k}: {v:.4f}")
+#     if run_dir and len(dates) > 0 and len(y_trues_inv[0]) > 0:
+#         plt.figure(figsize=(18, 12))
+#         for i in range(3):
+#             if len(y_trues_inv[i]) > 0:
+#                 plt.subplot(3, 1, i + 1)
+#                 plot_dates_current_horizon = dates[:len(y_trues_inv[i])]
+#                 plt.plot(plot_dates_current_horizon, y_trues_inv[i], label='Observed', color='red', linewidth=1.0)
+#                 plt.plot(plot_dates_current_horizon, y_preds_inv[i], label='Predicted', color='blue', linewidth=1.0)
+#                 if type == "streamflow":
+#                     plt.title(f'Sequential Streamflow Prediction at T+{i+1} - {dataset_name}')
+#                     plt.ylabel('Streamflow')
+#                 else:
+#                     plt.title(f'Sequential Waterlevel Prediction at T+{i+1} - {dataset_name}')
+#                     plt.ylabel('Waterlevel')
+#                 plt.xlabel('Date')
+#                 plt.legend()
+#                 plt.grid(True, alpha=0.3)
+#             else:
+#                 print(f"Skipping plot for T+{i+1} as data is empty for {dataset_name}.")
+#         if plt.get_fignums():
+#             plt.tight_layout()
+#             plt.savefig(os.path.join(run_dir, f'sequential_predictions_{dataset_name.lower().replace(" ", "_")}.png'),
+#                         dpi=300, bbox_inches='tight')
+#             plt.close()
+#         else:
+#             print(f"No plots generated for {dataset_name} due to lack of valid data.")
+#     elif run_dir:
+#         print(f"Skipping plot generation for {dataset_name} as there's no sufficient data or valid dates.")
+#     return horizon_metrics, top10_nse, horizon_nse
 
 import os
 import pandas as pd
@@ -468,7 +528,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
         t2_test_ds = T2Dataset(test_df, features, target, t1_test_preds_raw, rating_curve_preds_t1, lookback)
         if len(t2_test_ds) > 0:
             t2_test_loader = DataLoader(t2_test_ds, batch_size=256, shuffle=False)
-            t2_test_preds_raw = get_predictions(models['T+2'], t2_test_loader, device)
+            t2_test_preds_raw = get_predictions(models['T+2'], t2_test_loader, device, use_rating_curve)
             y_trues_raw_t2 = test_df[target].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
             if len(y_trues_raw_t2) > 0:
                 dummy_true_t2 = np.zeros((len(y_trues_raw_t2), len(features)))
@@ -515,7 +575,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
                              rating_curve_preds_t1, rating_curve_preds_t2, lookback)
         if len(t3_test_ds) > 0:
             t3_test_loader = DataLoader(t3_test_ds, batch_size=256, shuffle=False)
-            t3_test_preds_raw = get_predictions(models['T+3'], t3_test_loader, device)
+            t3_test_preds_raw = get_predictions(models['T+3'], t3_test_loader, device, use_rating_curve)
             y_trues_raw_t3 = test_df[target].iloc[lookback+2:lookback+2+len(t3_test_preds_raw)].values
             if len(y_trues_raw_t3) > 0:
                 dummy_true_t3 = np.zeros((len(y_trues_raw_t3), len(features)))
