@@ -9,22 +9,19 @@ class T1Dataset(Dataset):
     - Uses data from t-n to t-1 (lookback period)
     - Predicts t+1
     """
-    def __init__(self, data, input_cols, target_col, lookback=30):  # Fixed: was missing __
+    def __init__(self, data, input_cols, target_col, lookback=30):
         self.X = data[input_cols].values
         self.y = data[target_col].values
         self.lookback = lookback
-    
-    def __len__(self):  # Fixed: was missing __
-        # Need at least lookback+1 points to create one sample
-        if len(self.X) <= self.lookback:
-            return 0
-        return len(self.X) - self.lookback
-    
-    def __getitem__(self, idx):  # Fixed: was missing __
-        # Input: t-n to t-1 (lookback points ending at idx+lookback-1)
-        # Target: t+1 (idx+lookback)
-        x = self.X[idx : idx + self.lookback]
-        y = self.y[idx + self.lookback]
+
+    def __len__(self):
+        # Need lookback (t-n to t-1) + 1 skipped (t) + 1 for y (t+1)
+        max_samples = len(self.X) - self.lookback - 1
+        return max(0, max_samples)
+
+    def __getitem__(self, idx):
+        x = self.X[idx : idx + self.lookback]              # t-n to t-1
+        y = self.y[idx + self.lookback + 1]                # t+1
         return (torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
 
 class T2Dataset(Dataset):
