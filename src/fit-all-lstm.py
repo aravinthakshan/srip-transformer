@@ -243,7 +243,7 @@ def main():
                     full_station_path,
                     features,
                     target_variable,
-                    epochs=25 # number of epochs here 
+                    epochs=1 # number of epochs here 
                 )
                 
                 if run_info_file_path:
