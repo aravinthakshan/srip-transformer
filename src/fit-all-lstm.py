@@ -209,7 +209,7 @@ def main():
     os.makedirs(master_output_dir, exist_ok=True)
     print(f"All sequential LSTM experiment results will be saved under: {master_output_dir}")
     
-    station_data_path = r'/home/aravinthakshan/Projects/main-srip/hierarchial'
+    station_data_path = os.path.abspath(os.path.join(script_dir, '..', 'hierarchial'))
     
     all_run_metrics = []
     
