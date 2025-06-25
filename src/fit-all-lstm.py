@@ -127,8 +127,7 @@ def parse_run_info(run_info_path):
     return parsed_data
 
 def run_experiment(master_output_dir_for_run, station_file, features, target_variable, epochs=25):
-    station_name = os.path.basename(station_file).replace("new_", "").replace(".csv", "").replace("_with_hierarchical_quantiles", "")
-    
+    station_name = os.path.basename(station_file).replace("new_", "").split("_with_")[0]
     feature_set_name = "custom_features"
     if 'modelq' in features and 'waterlevel_upstream' in features:
         feature_set_name = "Everything-w-Modelq"
@@ -138,9 +137,7 @@ def run_experiment(master_output_dir_for_run, station_file, features, target_var
         feature_set_name = "basic_plus_modelq"
     elif 'VIC_W_dam' in features:
         feature_set_name = "basic_plus_VIC_W_Dam"
-    
     description = f"{station_name}_{target_variable}_{feature_set_name}"
-    
     script_dir = os.path.dirname(os.path.abspath(__file__))
     command = [
         "python",
@@ -150,7 +147,8 @@ def run_experiment(master_output_dir_for_run, station_file, features, target_var
         "--station_file", station_file,
         "--target_variable", target_variable,
         "--features", ",".join(features),
-        "--output_base_dir", master_output_dir_for_run
+        "--output_base_dir", master_output_dir_for_run,
+        "--station_name", station_name
     ]
     
     print(f"--- Running experiment: {description} ---")
@@ -187,13 +185,13 @@ def main():
     from misc import RatingCurveFitter
     from misc import create_run_directory, save_run_info
     new_station_files = [ # station files here
-        'new_Barmanghat_with_hierarchical_quantiles', 
-        'new_Garudeshwar_with_hierarchical_quantiles',
+        # 'new_Barmanghat_with_hierarchical_quantiles', 
+        # 'new_Garudeshwar_with_hierarchical_quantiles',
         'new_Handia_with_hierarchical_quantiles',
-        'new_Hoshangabad_with_hierarchical_quantiles',
-        'new_Mandleshwar_with_hierarchical_quantiles',
-        'new_Manot_with_hierarchical_quantiles',
-        'new_Sandia_with_hierarchical_quantiles'
+        # 'new_Hoshangabad_with_hierarchical_quantiles',
+        # 'new_Mandleshwar_with_hierarchical_quantiles',
+        # 'new_Manot_with_hierarchical_quantiles',
+        # 'new_Sandia_with_hierarchical_quantiles'
     ]
     
     feature_sets = { # station feature sets here
@@ -243,7 +241,7 @@ def main():
                     full_station_path,
                     features,
                     target_variable,
-                    epochs=25 # number of epochs here 
+                    epochs=1 # number of epochs here 
                 )
                 
                 if run_info_file_path:

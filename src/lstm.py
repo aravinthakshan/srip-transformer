@@ -19,6 +19,7 @@ class T1LSTMModel(nn.Module):
         attn_out, _ = self.attention(query, lstm_out, lstm_out)
         return self.fc(attn_out.squeeze(1)).squeeze(-1)
 
+
 class T2LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):
         super().__init__()
@@ -90,3 +91,27 @@ class T3LSTMModel(nn.Module):
         # Use the additional features as query
         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
         return self.fc(attn_out.squeeze(1)).squeeze(-1)
+
+# import torch.nn as nn
+# import torch
+
+# class T2LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):
+#         super().__init__()
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+
+#     def forward(self, x, t1_pred, rating_pred=None):
+#         out, _ = self.lstm(x)
+#         return self.fc(out[:, -1, :]).squeeze(-1)
+
+
+# class T3LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True):
+#         super().__init__()
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+#         self.fc = nn.Linear(hidden_size, 1)
+
+#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+#         out, _ = self.lstm(x)
+#         return self.fc(out[:, -1, :]).squeeze(-1)
