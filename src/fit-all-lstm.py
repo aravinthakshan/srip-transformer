@@ -185,13 +185,13 @@ def main():
     from misc import RatingCurveFitter
     from misc import create_run_directory, save_run_info
     new_station_files = [ # station files here
-        # 'new_Barmanghat_with_hierarchical_quantiles', 
-        # 'new_Garudeshwar_with_hierarchical_quantiles',
+        'new_Barmanghat_with_hierarchical_quantiles', 
+        'new_Garudeshwar_with_hierarchical_quantiles',
         'new_Handia_with_hierarchical_quantiles',
-        # 'new_Hoshangabad_with_hierarchical_quantiles',
-        # 'new_Mandleshwar_with_hierarchical_quantiles',
-        # 'new_Manot_with_hierarchical_quantiles',
-        # 'new_Sandia_with_hierarchical_quantiles'
+        'new_Hoshangabad_with_hierarchical_quantiles',
+        'new_Mandleshwar_with_hierarchical_quantiles',
+        'new_Manot_with_hierarchical_quantiles',
+        'new_Sandia_with_hierarchical_quantiles'
     ]
     
     feature_sets = { # station feature sets here
@@ -241,7 +241,7 @@ def main():
                     full_station_path,
                     features,
                     target_variable,
-                    epochs=1 # number of epochs here 
+                    epochs=35 # number of epochs here 
                 )
                 
                 if run_info_file_path:
