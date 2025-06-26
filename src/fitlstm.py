@@ -74,7 +74,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t1_train_ds) == 0:
         print("T+1 training dataset is empty. Skipping training for T+1 and subsequent models.")
         return {}, {}
-    t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=True)
+    t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=False)
     best_t1_nse = -np.inf
     best_t1_state = None
     for epoch in tqdm(range(num_epochs), desc="Training T+1"):
@@ -133,7 +133,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t2_train_ds) == 0:
         print("T+2 training dataset is empty. Skipping training for T+2 and T+3 models.")
         return models, train_metrics
-    t2_train_loader = DataLoader(t2_train_ds, batch_size=256, shuffle=True)
+    t2_train_loader = DataLoader(t2_train_ds, batch_size=256, shuffle=False)
     best_t2_nse = -np.inf
     best_t2_state = None
     for epoch in tqdm(range(num_epochs), desc="Training T+2"):
@@ -198,7 +198,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
     if len(t3_train_ds) == 0:
         print("T+3 training dataset is empty. Skipping T+3 training.")
         return models, train_metrics
-    t3_train_loader = DataLoader(t3_train_ds, batch_size=256, shuffle=True)
+    t3_train_loader = DataLoader(t3_train_ds, batch_size=256, shuffle=False)
     best_t3_nse = -np.inf
     best_t3_state = None
     for epoch in tqdm(range(num_epochs), desc="Training T+3"):
