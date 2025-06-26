@@ -94,15 +94,18 @@
 
 import torch
 import torch.nn as nn
+import torch
+import torch.nn as nn
 
 class T1LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size=64, num_layers=1, activation='relu'):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function
+        # Choose activation function for intermediate layer
         if activation == 'relu':
             self.activation = nn.ReLU()
         elif activation == 'softplus':
@@ -116,11 +119,12 @@ class T1LSTMModel(nn.Module):
         lstm_out, _ = self.lstm(x)
         query = lstm_out[:, -1:, :]
         attn_out, _ = self.attention(query, lstm_out, lstm_out)
-        output = self.fc(attn_out.squeeze(1)).squeeze(-1)
         
-        # Apply activation to ensure non-negative output
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
         if self.activation is not None:
-            output = self.activation(output)
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
         
         return output
 
@@ -139,9 +143,10 @@ class T2LSTMModel(nn.Module):
             
         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function
+        # Choose activation function for intermediate layer
         if activation == 'relu':
             self.activation = nn.ReLU()
         elif activation == 'softplus':
@@ -163,12 +168,13 @@ class T2LSTMModel(nn.Module):
         combined_features = torch.cat([lstm_out, additional_projected], dim=1)
         
         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
-        output = self.fc(attn_out.squeeze(1)).squeeze(-1)
         
-        # Apply activation to ensure non-negative output
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
         if self.activation is not None:
-            output = self.activation(output)
-            
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
+        
         return output
 
 
@@ -186,9 +192,10 @@ class T3LSTMModel(nn.Module):
             
         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function
+        # Choose activation function for intermediate layer
         if activation == 'relu':
             self.activation = nn.ReLU()
         elif activation == 'softplus':
@@ -210,13 +217,15 @@ class T3LSTMModel(nn.Module):
         combined_features = torch.cat([lstm_out, additional_projected], dim=1)
         
         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
-        output = self.fc(attn_out.squeeze(1)).squeeze(-1)
         
-        # Apply activation to ensure non-negative output
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
         if self.activation is not None:
-            output = self.activation(output)
-            
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
+        
         return output
+
 
 # import torch.nn as nn
 # import torch
