@@ -1,136 +1,134 @@
-# import torch
-# import torch.nn as nn
-# import torch
-# import torch.nn as nn
+import torch
+import torch.nn as nn
 
-# class T1LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, activation='softplus'):
-#         super().__init__()
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-#         self.fc2 = nn.Linear(hidden_size//2, 1)
+class T1LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, activation='softplus'):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-#         # Choose activation function for intermediate layer
-#         if activation == 'relu':
-#             self.activation = nn.ReLU()
-#         elif activation == 'softplus':
-#             self.activation = nn.Softplus()
-#         elif activation == 'elu':
-#             self.activation = nn.ELU()
-#         else:
-#             self.activation = None
+        # Choose activation function for intermediate layer
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'softplus':
+            self.activation = nn.Softplus()
+        elif activation == 'elu':
+            self.activation = nn.ELU()
+        else:
+            self.activation = None
         
-#     def forward(self, x):
-#         lstm_out, _ = self.lstm(x)
-#         query = lstm_out[:, -1:, :]
-#         attn_out, _ = self.attention(query, lstm_out, lstm_out)
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        query = lstm_out[:, -1:, :]
+        attn_out, _ = self.attention(query, lstm_out, lstm_out)
         
-#         # Use intermediate activation but not at the final output
-#         hidden = self.fc1(attn_out.squeeze(1))
-#         if self.activation is not None:
-#             hidden = self.activation(hidden)
-#         output = self.fc2(hidden).squeeze(-1)
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
+        if self.activation is not None:
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
         
-#         return abs(output)
+        return abs(output)
 
 
-# class T2LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
-#         super().__init__()
-#         self.use_rating_curve = use_rating_curve
-#         self.hidden_size = hidden_size
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+class T2LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+        super().__init__()
+        self.use_rating_curve = use_rating_curve
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-#         if self.use_rating_curve:
-#             self.additional_features = 2
-#         else:
-#             self.additional_features = 1
+        if self.use_rating_curve:
+            self.additional_features = 2
+        else:
+            self.additional_features = 1
             
-#         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
-#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-#         self.fc2 = nn.Linear(hidden_size//2, 1)
+        self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-#         # Choose activation function for intermediate layer
-#         if activation == 'relu':
-#             self.activation = nn.ReLU()
-#         elif activation == 'softplus':
-#             self.activation = nn.Softplus()
-#         elif activation == 'elu':
-#             self.activation = nn.ELU()
-#         else:
-#             self.activation = None
+        # Choose activation function for intermediate layer
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'softplus':
+            self.activation = nn.Softplus()
+        elif activation == 'elu':
+            self.activation = nn.ELU()
+        else:
+            self.activation = None
         
-#     def forward(self, x, t1_pred, rating_pred=None):
-#         lstm_out, _ = self.lstm(x)
+    def forward(self, x, t1_pred, rating_pred=None):
+        lstm_out, _ = self.lstm(x)
         
-#         if self.use_rating_curve and rating_pred is not None:
-#             additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
-#         else:
-#             additional_features = t1_pred.unsqueeze(-1)
+        if self.use_rating_curve and rating_pred is not None:
+            additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
+        else:
+            additional_features = t1_pred.unsqueeze(-1)
             
-#         additional_projected = self.feature_projection(additional_features).unsqueeze(1)
-#         combined_features = torch.cat([lstm_out, additional_projected], dim=1)
+        additional_projected = self.feature_projection(additional_features).unsqueeze(1)
+        combined_features = torch.cat([lstm_out, additional_projected], dim=1)
         
-#         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+        attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
         
-#         # Use intermediate activation but not at the final output
-#         hidden = self.fc1(attn_out.squeeze(1))
-#         if self.activation is not None:
-#             hidden = self.activation(hidden)
-#         output = self.fc2(hidden).squeeze(-1)
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
+        if self.activation is not None:
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
         
-#         return abs(output)
+        return abs(output)
 
 
-# class T3LSTMModel(nn.Module):
-#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
-#         super().__init__()
-#         self.use_rating_curve = use_rating_curve
-#         self.hidden_size = hidden_size
-#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+class T3LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+        super().__init__()
+        self.use_rating_curve = use_rating_curve
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-#         if self.use_rating_curve:
-#             self.additional_features = 4
-#         else:
-#             self.additional_features = 2
+        if self.use_rating_curve:
+            self.additional_features = 4
+        else:
+            self.additional_features = 2
             
-#         self.feature_projection = nn.Linear(self.additional_features, hidden_size)
-#         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
-#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-#         self.fc2 = nn.Linear(hidden_size//2, 1)
+        self.feature_projection = nn.Linear(self.additional_features, hidden_size)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
+        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+        self.fc2 = nn.Linear(hidden_size//2, 1)
         
-#         # Choose activation function for intermediate layer
-#         if activation == 'relu':
-#             self.activation = nn.ReLU()
-#         elif activation == 'softplus':
-#             self.activation = nn.Softplus()
-#         elif activation == 'elu':
-#             self.activation = nn.ELU()
-#         else:
-#             self.activation = None
+        # Choose activation function for intermediate layer
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'softplus':
+            self.activation = nn.Softplus()
+        elif activation == 'elu':
+            self.activation = nn.ELU()
+        else:
+            self.activation = None
         
-#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
-#         lstm_out, _ = self.lstm(x)
+    def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+        lstm_out, _ = self.lstm(x)
         
-#         if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
-#             additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
-#         else:
-#             additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
+        if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+            additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
+        else:
+            additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
             
-#         additional_projected = self.feature_projection(additional_features).unsqueeze(1)
-#         combined_features = torch.cat([lstm_out, additional_projected], dim=1)
+        additional_projected = self.feature_projection(additional_features).unsqueeze(1)
+        combined_features = torch.cat([lstm_out, additional_projected], dim=1)
         
-#         attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
+        attn_out, _ = self.attention(additional_projected, combined_features, combined_features)
         
-#         # Use intermediate activation but not at the final output
-#         hidden = self.fc1(attn_out.squeeze(1))
-#         if self.activation is not None:
-#             hidden = self.activation(hidden)
-#         output = self.fc2(hidden).squeeze(-1)
+        # Use intermediate activation but not at the final output
+        hidden = self.fc1(attn_out.squeeze(1))
+        if self.activation is not None:
+            hidden = self.activation(hidden)
+        output = self.fc2(hidden).squeeze(-1)
         
-#         return abs(output)
+        return abs(output)
 
 # ## Option 1
 # import torch
@@ -889,187 +887,187 @@
         
 #         return abs(output)
 
-import torch
-import torch.nn as nn
+# import torch
+# import torch.nn as nn
 
-class T1LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, activation='softplus'):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+# class T1LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, activation='softplus'):
+#         super().__init__()
+#         self.hidden_size = hidden_size
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-        self.fc2 = nn.Linear(hidden_size//2, 1)
+#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+#         self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function for intermediate layer
-        if activation == 'relu':
-            self.activation = nn.ReLU()
-        elif activation == 'softplus':
-            self.activation = nn.Softplus()
-        elif activation == 'elu':
-            self.activation = nn.ELU()
-        else:
-            self.activation = None
+#         # Choose activation function for intermediate layer
+#         if activation == 'relu':
+#             self.activation = nn.ReLU()
+#         elif activation == 'softplus':
+#             self.activation = nn.Softplus()
+#         elif activation == 'elu':
+#             self.activation = nn.ELU()
+#         else:
+#             self.activation = None
         
-    def forward(self, x):
-        lstm_out, _ = self.lstm(x)
+#     def forward(self, x):
+#         lstm_out, _ = self.lstm(x)
         
-        # Use LSTM's final output directly
-        lstm_final = lstm_out[:, -1, :]
+#         # Use LSTM's final output directly
+#         lstm_final = lstm_out[:, -1, :]
         
-        # Apply final layers
-        hidden = self.fc1(lstm_final)
-        if self.activation is not None:
-            hidden = self.activation(hidden)
-        output = self.fc2(hidden).squeeze(-1)
+#         # Apply final layers
+#         hidden = self.fc1(lstm_final)
+#         if self.activation is not None:
+#             hidden = self.activation(hidden)
+#         output = self.fc2(hidden).squeeze(-1)
         
-        return abs(output)
+#         return abs(output)
 
 
-class T2LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
-        super().__init__()
-        self.use_rating_curve = use_rating_curve
-        self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+# class T2LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.hidden_size = hidden_size
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-        # Determine additional features
-        if self.use_rating_curve:
-            self.additional_features = 2  # t1_pred + rating_pred
-        else:
-            self.additional_features = 1  # t1_pred only
+#         # Determine additional features
+#         if self.use_rating_curve:
+#             self.additional_features = 2  # t1_pred + rating_pred
+#         else:
+#             self.additional_features = 1  # t1_pred only
         
-        # Add interaction terms
-        self.use_interactions = True
-        if self.use_interactions and self.use_rating_curve:
-            self.interaction_features = 1  # t1_pred * rating_pred
-            total_additional = self.additional_features + self.interaction_features
-        else:
-            total_additional = self.additional_features
+#         # Add interaction terms
+#         self.use_interactions = True
+#         if self.use_interactions and self.use_rating_curve:
+#             self.interaction_features = 1  # t1_pred * rating_pred
+#             total_additional = self.additional_features + self.interaction_features
+#         else:
+#             total_additional = self.additional_features
         
-        # Combine LSTM output with additional features
-        self.fusion_layer = nn.Linear(hidden_size + total_additional, hidden_size)
+#         # Combine LSTM output with additional features
+#         self.fusion_layer = nn.Linear(hidden_size + total_additional, hidden_size)
         
-        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-        self.fc2 = nn.Linear(hidden_size//2, 1)
+#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+#         self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function for intermediate layer
-        if activation == 'relu':
-            self.activation = nn.ReLU()
-        elif activation == 'softplus':
-            self.activation = nn.Softplus()
-        elif activation == 'elu':
-            self.activation = nn.ELU()
-        else:
-            self.activation = None
+#         # Choose activation function for intermediate layer
+#         if activation == 'relu':
+#             self.activation = nn.ReLU()
+#         elif activation == 'softplus':
+#             self.activation = nn.Softplus()
+#         elif activation == 'elu':
+#             self.activation = nn.ELU()
+#         else:
+#             self.activation = None
         
-    def forward(self, x, t1_pred, rating_pred=None):
-        lstm_out, _ = self.lstm(x)
-        lstm_final = lstm_out[:, -1, :]
+#     def forward(self, x, t1_pred, rating_pred=None):
+#         lstm_out, _ = self.lstm(x)
+#         lstm_final = lstm_out[:, -1, :]
         
-        # Combine with additional features
-        if self.use_rating_curve and rating_pred is not None:
-            additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
+#         # Combine with additional features
+#         if self.use_rating_curve and rating_pred is not None:
+#             additional_features = torch.stack([t1_pred, rating_pred], dim=-1)
             
-            # Add interaction terms
-            if self.use_interactions:
-                interaction = (t1_pred * rating_pred).unsqueeze(-1)
-                additional_features = torch.cat([additional_features, interaction], dim=-1)
-        else:
-            additional_features = t1_pred.unsqueeze(-1)
+#             # Add interaction terms
+#             if self.use_interactions:
+#                 interaction = (t1_pred * rating_pred).unsqueeze(-1)
+#                 additional_features = torch.cat([additional_features, interaction], dim=-1)
+#         else:
+#             additional_features = t1_pred.unsqueeze(-1)
         
-        # Concatenate and fuse features
-        combined = torch.cat([lstm_final, additional_features], dim=-1)
-        fused = self.fusion_layer(combined)
+#         # Concatenate and fuse features
+#         combined = torch.cat([lstm_final, additional_features], dim=-1)
+#         fused = self.fusion_layer(combined)
         
-        # Apply final layers
-        hidden = self.fc1(fused)
-        if self.activation is not None:
-            hidden = self.activation(hidden)
-        output = self.fc2(hidden).squeeze(-1)
+#         # Apply final layers
+#         hidden = self.fc1(fused)
+#         if self.activation is not None:
+#             hidden = self.activation(hidden)
+#         output = self.fc2(hidden).squeeze(-1)
         
-        return abs(output)
+#         return abs(output)
 
 
-class T3LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
-        super().__init__()
-        self.use_rating_curve = use_rating_curve
-        self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+# class T3LSTMModel(nn.Module):
+#     def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+#         super().__init__()
+#         self.use_rating_curve = use_rating_curve
+#         self.hidden_size = hidden_size
+#         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         
-        # Determine additional features
-        if self.use_rating_curve:
-            self.additional_features = 4  # t1_pred + t2_pred + rating_pred_t1 + rating_pred_t2
-        else:
-            self.additional_features = 2  # t1_pred + t2_pred only
+#         # Determine additional features
+#         if self.use_rating_curve:
+#             self.additional_features = 4  # t1_pred + t2_pred + rating_pred_t1 + rating_pred_t2
+#         else:
+#             self.additional_features = 2  # t1_pred + t2_pred only
         
-        # Add comprehensive interaction terms for T3
-        self.use_interactions = True
-        if self.use_interactions:
-            if self.use_rating_curve:
-                # Complex interactions: t1*t2, t1*rating1, t2*rating2, t1*t2*rating1, t1*t2*rating2
-                self.interaction_features = 5
-                total_additional = self.additional_features + self.interaction_features
-            else:
-                # Simple interaction: t1*t2
-                self.interaction_features = 1
-                total_additional = self.additional_features + self.interaction_features
-        else:
-            total_additional = self.additional_features
+#         # Add comprehensive interaction terms for T3
+#         self.use_interactions = True
+#         if self.use_interactions:
+#             if self.use_rating_curve:
+#                 # Complex interactions: t1*t2, t1*rating1, t2*rating2, t1*t2*rating1, t1*t2*rating2
+#                 self.interaction_features = 5
+#                 total_additional = self.additional_features + self.interaction_features
+#             else:
+#                 # Simple interaction: t1*t2
+#                 self.interaction_features = 1
+#                 total_additional = self.additional_features + self.interaction_features
+#         else:
+#             total_additional = self.additional_features
         
-        # Multi-layer fusion for complex feature combinations
-        self.fusion_layer1 = nn.Linear(hidden_size + total_additional, hidden_size * 2)
-        self.fusion_layer2 = nn.Linear(hidden_size * 2, hidden_size)
-        self.fusion_activation = nn.ReLU()
+#         # Multi-layer fusion for complex feature combinations
+#         self.fusion_layer1 = nn.Linear(hidden_size + total_additional, hidden_size * 2)
+#         self.fusion_layer2 = nn.Linear(hidden_size * 2, hidden_size)
+#         self.fusion_activation = nn.ReLU()
         
-        self.fc1 = nn.Linear(hidden_size, hidden_size//2)
-        self.fc2 = nn.Linear(hidden_size//2, 1)
+#         self.fc1 = nn.Linear(hidden_size, hidden_size//2)
+#         self.fc2 = nn.Linear(hidden_size//2, 1)
         
-        # Choose activation function for intermediate layer
-        if activation == 'relu':
-            self.activation = nn.ReLU()
-        elif activation == 'softplus':
-            self.activation = nn.Softplus()
-        elif activation == 'elu':
-            self.activation = nn.ELU()
-        else:
-            self.activation = None
+#         # Choose activation function for intermediate layer
+#         if activation == 'relu':
+#             self.activation = nn.ReLU()
+#         elif activation == 'softplus':
+#             self.activation = nn.Softplus()
+#         elif activation == 'elu':
+#             self.activation = nn.ELU()
+#         else:
+#             self.activation = None
         
-    def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
-        lstm_out, _ = self.lstm(x)
-        lstm_final = lstm_out[:, -1, :]
+#     def forward(self, x, t1_pred, t2_pred, rating_pred_t1=None, rating_pred_t2=None):
+#         lstm_out, _ = self.lstm(x)
+#         lstm_final = lstm_out[:, -1, :]
         
-        # Create comprehensive feature combinations
-        if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
-            additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
+#         # Create comprehensive feature combinations
+#         if self.use_rating_curve and rating_pred_t1 is not None and rating_pred_t2 is not None:
+#             additional_features = torch.stack([t1_pred, t2_pred, rating_pred_t1, rating_pred_t2], dim=-1)
             
-            # Add complex interaction terms
-            if self.use_interactions:
-                int1 = t1_pred * t2_pred  # Primary prediction interaction
-                int2 = t1_pred * rating_pred_t1  # T1 with its rating
-                int3 = t2_pred * rating_pred_t2  # T2 with its rating
-                int4 = t1_pred * t2_pred * rating_pred_t1  # Triple interaction 1
-                int5 = t1_pred * t2_pred * rating_pred_t2  # Triple interaction 2
-                interactions = torch.stack([int1, int2, int3, int4, int5], dim=-1)
-                additional_features = torch.cat([additional_features, interactions], dim=-1)
-        else:
-            additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
+#             # Add complex interaction terms
+#             if self.use_interactions:
+#                 int1 = t1_pred * t2_pred  # Primary prediction interaction
+#                 int2 = t1_pred * rating_pred_t1  # T1 with its rating
+#                 int3 = t2_pred * rating_pred_t2  # T2 with its rating
+#                 int4 = t1_pred * t2_pred * rating_pred_t1  # Triple interaction 1
+#                 int5 = t1_pred * t2_pred * rating_pred_t2  # Triple interaction 2
+#                 interactions = torch.stack([int1, int2, int3, int4, int5], dim=-1)
+#                 additional_features = torch.cat([additional_features, interactions], dim=-1)
+#         else:
+#             additional_features = torch.stack([t1_pred, t2_pred], dim=-1)
             
-            # Simple interaction for non-rating case
-            if self.use_interactions:
-                interaction = (t1_pred * t2_pred).unsqueeze(-1)
-                additional_features = torch.cat([additional_features, interaction], dim=-1)
+#             # Simple interaction for non-rating case
+#             if self.use_interactions:
+#                 interaction = (t1_pred * t2_pred).unsqueeze(-1)
+#                 additional_features = torch.cat([additional_features, interaction], dim=-1)
         
-        # Multi-layer feature fusion
-        combined = torch.cat([lstm_final, additional_features], dim=-1)
-        fused1 = self.fusion_activation(self.fusion_layer1(combined))
-        fused2 = self.fusion_layer2(fused1)
+#         # Multi-layer feature fusion
+#         combined = torch.cat([lstm_final, additional_features], dim=-1)
+#         fused1 = self.fusion_activation(self.fusion_layer1(combined))
+#         fused2 = self.fusion_layer2(fused1)
         
-        # Apply final layers
-        hidden = self.fc1(fused2)
-        if self.activation is not None:
-            hidden = self.activation(hidden)
-        output = self.fc2(hidden).squeeze(-1)
+#         # Apply final layers
+#         hidden = self.fc1(fused2)
+#         if self.activation is not None:
+#             hidden = self.activation(hidden)
+#         output = self.fc2(hidden).squeeze(-1)
         
-        return abs(output)
+#         return abs(output)
