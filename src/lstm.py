@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 class T1LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, activation='softplus'):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, activation='relu'):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=8, batch_first=True)
@@ -36,7 +36,7 @@ class T1LSTMModel(nn.Module):
 
 
 class T2LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='relu'):
         super().__init__()
         self.use_rating_curve = use_rating_curve
         self.hidden_size = hidden_size
@@ -85,7 +85,7 @@ class T2LSTMModel(nn.Module):
 
 
 class T3LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='softplus'):
+    def __init__(self, input_size, hidden_size=64, num_layers=1, use_rating_curve=True, activation='relu'):
         super().__init__()
         self.use_rating_curve = use_rating_curve
         self.hidden_size = hidden_size

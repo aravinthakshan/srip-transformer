@@ -288,7 +288,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         # T+1
         t1_train_ds = T1Dataset(train_df, features, target, lookback)
         if len(t1_train_ds) > 0 and target_idx is not None:
-            t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=True)
+            t1_train_loader = DataLoader(t1_train_ds, batch_size=256, shuffle=False)
             t1_train_preds_raw = get_predictions(models['T+1'], t1_train_loader, device)
             y_trues_raw_t1 = train_df[target].iloc[lookback:lookback+len(t1_train_preds_raw)].values
             dummy_true_t1 = np.zeros((len(y_trues_raw_t1), len(features)))
@@ -306,7 +306,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
         if 'T+2' in models and target_idx is not None:
             t2_train_ds = T2Dataset(train_df, features, target, t1_train_preds, rating_curve_preds_t1, lookback)
             if len(t2_train_ds) > 0:
-                t2_train_loader = DataLoader(t2_train_ds, batch_size=256, shuffle=True)
+                t2_train_loader = DataLoader(t2_train_ds, batch_size=256, shuffle=False)
                 t2_train_preds_raw = get_predictions(models['T+2'], t2_train_loader, device, use_rating_curve)
                 y_trues_raw_t2 = train_df[target].iloc[lookback+1:lookback+1+len(t2_train_preds_raw)].values
                 dummy_true_t2 = np.zeros((len(y_trues_raw_t2), len(features)))
@@ -325,7 +325,7 @@ def train_sequential_models(train_dfs, target, features, num_epochs=20, lr=1e-3,
             t3_train_ds = T3Dataset(train_df, features, target, t1_train_preds, t2_train_preds,
                                 rating_curve_preds_t1, rating_curve_preds_t2, lookback)
             if len(t3_train_ds) > 0:
-                t3_train_loader = DataLoader(t3_train_ds, batch_size=256, shuffle=True)
+                t3_train_loader = DataLoader(t3_train_ds, batch_size=256, shuffle=False)
                 t3_train_preds_raw = get_predictions(models['T+3'], t3_train_loader, device, use_rating_curve)
                 y_trues_raw_t3 = train_df[target].iloc[lookback+2:lookback+2+len(t3_train_preds_raw)].values
                 dummy_true_t3 = np.zeros((len(y_trues_raw_t3), len(features)))
@@ -399,7 +399,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
         return horizon_metrics, top10_nse, horizon_nse
     t1_test_ds = T1Dataset(test_df, features, target, lookback)
     if len(t1_test_ds) > 0:
-        t1_test_loader = DataLoader(t1_test_ds, batch_size=256, shuffle=True)
+        t1_test_loader = DataLoader(t1_test_ds, batch_size=256, shuffle=False)
         t1_test_preds_raw = get_predictions(models['T+1'], t1_test_loader, device)
         y_trues_raw_t1 = test_df[target].iloc[lookback:lookback+len(t1_test_preds_raw)].values
         if len(y_trues_raw_t1) > 0:
@@ -444,7 +444,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
     if len(t1_test_preds_raw) > 0:
         t2_test_ds = T2Dataset(test_df, features, target, t1_test_preds_raw, rating_curve_preds_t1, lookback)
         if len(t2_test_ds) > 0:
-            t2_test_loader = DataLoader(t2_test_ds, batch_size=256, shuffle=True)
+            t2_test_loader = DataLoader(t2_test_ds, batch_size=256, shuffle=False)
             t2_test_preds_raw = get_predictions(models['T+2'], t2_test_loader, device, use_rating_curve)
             y_trues_raw_t2 = test_df[target].iloc[lookback+1:lookback+1+len(t2_test_preds_raw)].values
             if len(y_trues_raw_t2) > 0:
@@ -491,7 +491,7 @@ def evaluate_sequential_models(models, test_df, lookback, scaler, target, featur
         t3_test_ds = T3Dataset(test_df, features, target, t1_test_preds_raw, t2_test_preds_raw, 
                              rating_curve_preds_t1, rating_curve_preds_t2, lookback)
         if len(t3_test_ds) > 0:
-            t3_test_loader = DataLoader(t3_test_ds, batch_size=256, shuffle=True)
+            t3_test_loader = DataLoader(t3_test_ds, batch_size=256, shuffle=False)
             t3_test_preds_raw = get_predictions(models['T+3'], t3_test_loader, device, use_rating_curve)
             y_trues_raw_t3 = test_df[target].iloc[lookback+2:lookback+2+len(t3_test_preds_raw)].values
             if len(y_trues_raw_t3) > 0:
