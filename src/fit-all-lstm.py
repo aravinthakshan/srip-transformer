@@ -194,6 +194,19 @@ def main():
         'new_Sandia_with_hierarchical_quantiles'
     ]
     
+    csv_files = [
+    "new_BamniBanjar.csv",
+    "new_Belkhedi.csv",
+    "new_Chhidgaon.csv",
+    "new_Dindori.csv",
+    "new_Gadarwara.csv",
+    "new_Kogaon.csv",
+    "new_Mohgaon.csv",
+    "new_Patan.csv",
+    "new_Pati.csv"
+]
+
+
     feature_sets = { # station feature sets here
         'everything_w_modelq': [
             'rainfall', 'tmin', 'tmax', 'waterlevel_final', 'streamflow_final',
