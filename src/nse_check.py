@@ -7,7 +7,7 @@ def nse(obs, sim):
     return 1 - np.sum((obs - sim) ** 2) / np.sum((obs - np.mean(obs)) ** 2)
 
 # Change this path to your CSV file
-csv_path = "/home/aravinthakshan/Projects/main-srip/src/output_csv/predictions_combined_Handia_streamflow_final.csv"
+csv_path = "E:\SRIP 2025\Streamflow and Water-level Prediction\Final Stuff\srip-transformer\src\output_csv\predictions_combined_Handia_streamflow_final.csv"
 
 df = pd.read_csv(csv_path)
 
