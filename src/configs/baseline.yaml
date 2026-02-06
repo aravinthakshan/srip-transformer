@@ -1,0 +1,24 @@
+# Baseline Configuration
+# =====================
+# Direct LSTM prediction without any additional components
+# Sequential: OFF, MHA: OFF, Hierarchical: OFF, Fitter: OFF
+
+model:
+  sequential: false
+  use_attention: false
+  use_hierarchical: false
+  use_fitter: false
+
+lstm:
+  hidden_dim: 64
+  num_layers: 1
+  bidirectional: false
+  dropout: 0.1
+
+# Note: These are enforced by hard constraints but listed for clarity
+training:
+  lookback: 7
+  batch_size: 256
+  learning_rate: 0.001
+  epochs: 30
+  random_seed: 74

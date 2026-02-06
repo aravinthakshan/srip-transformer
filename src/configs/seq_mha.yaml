@@ -1,0 +1,27 @@
+# Sequential + MHA Configuration
+# ===============================
+# Sequential LSTM with Multi-Head Attention
+# Sequential: ON, MHA: ON, Hierarchical: OFF, Fitter: OFF
+
+model:
+  sequential: true
+  use_attention: true
+  use_hierarchical: false
+  use_fitter: false
+
+lstm:
+  hidden_dim: 64
+  num_layers: 1
+  bidirectional: false
+  dropout: 0.1
+
+attention:
+  num_heads: 8
+  pooling: last
+
+training:
+  lookback: 7
+  batch_size: 256
+  learning_rate: 0.001
+  epochs: 30
+  random_seed: 74
