@@ -54,17 +54,40 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_default_features(target: str) -> list:
-    """Get default feature list based on target type."""
+# Pre-computed hierarchical feature column names
+HIERARCHICAL_FEATURE_COLS = [
+    'hierarchical_feature_quantile_0.1',
+    'hierarchical_feature_quantile_0.5',
+    'hierarchical_feature_quantile_0.9',
+    'hierarchical_feature_quantile_0.95'
+]
+
+
+def detect_hierarchical_features(df) -> list:
+    """Detect if pre-computed hierarchical features exist in dataframe."""
+    available = [col for col in HIERARCHICAL_FEATURE_COLS if col in df.columns]
+    return available
+
+
+def get_default_features(target: str, df=None) -> list:
+    """Get default feature list based on target type and available columns."""
     base_features = [
         'rainfall', 'tmax', 'tmin',
         'waterlevel_upstream', 'streamflow_upstream'
     ]
     
     if 'streamflow' in target.lower():
-        return base_features + ['waterlevel_final', 'streamflow_final']
+        features = base_features + ['waterlevel_final', 'streamflow_final']
     else:
-        return base_features + ['waterlevel_final']
+        features = base_features + ['waterlevel_final']
+    
+    # Add pre-computed hierarchical features if available
+    if df is not None:
+        hier_features = detect_hierarchical_features(df)
+        if hier_features:
+            features = features + hier_features
+            
+    return features
 
 
 def train_epoch(
@@ -194,17 +217,27 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
+    # Load raw data first to detect available columns
+    print(f"Loading station data: {args.station}")
+    raw_df = pd.read_csv(args.station, parse_dates=['date'], dayfirst=True)
+    
+    # Detect pre-computed hierarchical features
+    hier_features = detect_hierarchical_features(raw_df)
+    has_precomputed_hier = len(hier_features) > 0
+    
+    if has_precomputed_hier:
+        print(f"\n✓ Detected pre-computed hierarchical features: {hier_features}")
+    
     # Determine features
     if args.features:
         features = [f.strip() for f in args.features.split(',')]
     else:
-        features = get_default_features(args.target)
+        features = get_default_features(args.target, raw_df if has_precomputed_hier else None)
         
-    print(f"Features: {features}")
+    print(f"Features ({len(features)}): {features}")
     print(f"Target: {args.target}")
     
-    # Load and prepare data
-    print(f"Loading station data: {args.station}")
+    # Load and prepare data with determined features
     df = load_station_data(args.station, features, args.target)
     
     station_name = args.station_name or Path(args.station).stem
@@ -264,38 +297,43 @@ def main():
             print(f"Rating curve saved: {rating_curve_path}")
             
     # ==========================
-    # Fit Hierarchical Model (if enabled)
+    # Handle Hierarchical Features
     # ==========================
     hier_model_path = None
     
     if config_dict.get('use_hierarchical', False):
-        print("\nFitting hierarchical model...")
-        hier = HierarchicalFeatures()
-        
-        # Define lagged columns
-        lag = 1  # 1-day lag for upstream
-        
-        # Check if required columns exist
-        required_cols = ['streamflow_upstream', 'rainfall', 'tmax', 'tmin', 'waterlevel_upstream']
-        if all(c in splits['train'].columns for c in required_cols):
-            try:
-                hier.fit(
-                    df=splits['train'],
-                    target_col=args.target,
-                    feeder_col='streamflow_upstream',
-                    rainfall_col='rainfall',
-                    covariate_cols=['tmax', 'tmin', 'waterlevel_upstream']
-                )
-                hier_model_path = os.path.join(run_dir, 'hierarchical_model.pkl')
-                hier.save(hier_model_path)
-                config_dict['hierarchical_model_path'] = hier_model_path
-                print(f"Hierarchical model saved: {hier_model_path}")
-            except Exception as e:
-                print(f"Warning: Hierarchical model fitting failed: {e}")
-                config_dict['use_hierarchical'] = False
+        if has_precomputed_hier:
+            # Use pre-computed hierarchical features (already in feature set)
+            print(f"\n✓ Using pre-computed hierarchical features (no CatBoost training needed)")
+            print(f"  Features: {hier_features}")
+            # Mark that we're using pre-computed features
+            config_dict['hierarchical_precomputed'] = True
         else:
-            print("Warning: Missing columns for hierarchical model. Disabling.")
-            config_dict['use_hierarchical'] = False
+            # Train CatBoost model from scratch
+            print("\nFitting hierarchical model (CatBoost)...")
+            hier = HierarchicalFeatures()
+            
+            # Check if required columns exist
+            required_cols = ['streamflow_upstream', 'rainfall', 'tmax', 'tmin', 'waterlevel_upstream']
+            if all(c in splits['train'].columns for c in required_cols):
+                try:
+                    hier.fit(
+                        df=splits['train'],
+                        target_col=args.target,
+                        feeder_col='streamflow_upstream',
+                        rainfall_col='rainfall',
+                        covariate_cols=['tmax', 'tmin', 'waterlevel_upstream']
+                    )
+                    hier_model_path = os.path.join(run_dir, 'hierarchical_model.pkl')
+                    hier.save(hier_model_path)
+                    config_dict['hierarchical_model_path'] = hier_model_path
+                    print(f"Hierarchical model saved: {hier_model_path}")
+                except Exception as e:
+                    print(f"Warning: Hierarchical model fitting failed: {e}")
+                    config_dict['use_hierarchical'] = False
+            else:
+                print("Warning: Missing columns for hierarchical model. Disabling.")
+                config_dict['use_hierarchical'] = False
             
     # ==========================
     # Create Model
