@@ -255,3 +255,7 @@ class DirectPredictor(nn.Module):
             predictions[f't{i+1}'] = torch.abs(head(shared).squeeze(-1))
             
         return predictions
+    
+    def count_parameters(self) -> int:
+        """Return total number of trainable parameters."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
