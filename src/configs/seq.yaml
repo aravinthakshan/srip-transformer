@@ -1,18 +1,17 @@
-# Sequential Configuration
-# ========================
-# Sequential LSTM prediction (T+1 feeds T+2, etc.)
-# Sequential: ON, MHA: OFF, Hierarchical: OFF, Fitter: OFF
+# Sequential LSTM Configuration
+# ==============================
+# 3 separate LSTM blocks: Block k processes [t-7..t-1] + predictions 1..k-1
+# Sequential: ON, Fitter: OFF
 
 model:
   sequential: true
-  use_attention: false
-  use_hierarchical: false
+  bidirectional: false
   use_fitter: false
+  use_hierarchical: false
 
 lstm:
   hidden_dim: 64
   num_layers: 1
-  bidirectional: false
   dropout: 0.1
 
 training:

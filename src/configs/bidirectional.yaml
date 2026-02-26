@@ -1,11 +1,11 @@
-# Vanilla LSTM Configuration
-# ===========================
-# Single LSTM block with 3 independent prediction heads
-# Sequential: OFF, Bidirectional: OFF, Fitter: OFF
+# Bidirectional LSTM Configuration
+# =================================
+# Single Bidirectional LSTM block with 3 independent prediction heads
+# Sequential: OFF, Bidirectional: ON, Fitter: OFF
 
 model:
   sequential: false
-  bidirectional: false
+  bidirectional: true
   use_fitter: false
   use_hierarchical: false
 

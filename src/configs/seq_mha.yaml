@@ -1,23 +1,22 @@
-# Sequential + MHA Configuration
-# ===============================
-# Sequential LSTM with Multi-Head Attention
-# Sequential: ON, MHA: ON, Hierarchical: OFF, Fitter: OFF
+# Sequential LSTM + MHA Configuration
+# =====================================
+# 3 separate LSTM blocks with MHA attending over each block's hidden states.
+# Sequential: ON, Attention: ON, Fitter: OFF
 
 model:
   sequential: true
+  bidirectional: false
   use_attention: true
-  use_hierarchical: false
   use_fitter: false
+  use_hierarchical: false
 
 lstm:
   hidden_dim: 64
   num_layers: 1
-  bidirectional: false
   dropout: 0.1
 
 attention:
   num_heads: 8
-  pooling: last
 
 training:
   lookback: 7

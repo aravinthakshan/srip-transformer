@@ -1,11 +1,12 @@
-# Vanilla LSTM Configuration
-# ===========================
-# Single LSTM block with 3 independent prediction heads
-# Sequential: OFF, Bidirectional: OFF, Fitter: OFF
+# Vanilla LSTM + MHA Configuration
+# ==================================
+# Single LSTM with Multi-Head Attention attending over hidden states.
+# Sequential: OFF, Bidirectional: OFF, Attention: ON
 
 model:
   sequential: false
   bidirectional: false
+  use_attention: true
   use_fitter: false
   use_hierarchical: false
 
@@ -13,6 +14,9 @@ lstm:
   hidden_dim: 64
   num_layers: 1
   dropout: 0.1
+
+attention:
+  num_heads: 8
 
 training:
   lookback: 7

@@ -1,0 +1,268 @@
+﻿py : E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final 
+Stuff\srip-transformer\src\models\fitter.py:41: 
+RuntimeWarning: overflow encountered in power
+At line:1 char:32
++ ... NG="utf-8"; py -3.12 src/train.py --config 
+src/configs/full.yaml --st ...
++                 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (E:\SRIP 202 
+   5\St...ntered in power:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  return a * np.power(np.maximum(wse - c, 0.001), b)
+
+============================================================
+  SeqLSTM-MHA TRAINING PIPELINE
+  Modular Ablation Framework
+============================================================
+
+============================================================
+  STEP 1: LOADING CONFIGURATION
+============================================================
+  Config file: src/configs/full.yaml
+  Config name: full
+
+  Configuration:
+    ΓÇó Sequential:    Γ£ô ON
+    ΓÇó Attention:     Γ£ô ON
+    ΓÇó Hierarchical:  Γ£ô ON
+    ΓÇó Rating Curve:  Γ£ô ON
+
+  LSTM Settings:
+    ΓÇó Hidden dim:    64
+    ΓÇó Num layers:    1
+    ΓÇó Bidirectional: False
+    ΓÇó Dropout:       0.1
+
+  Attention Settings:
+    ΓÇó Num heads:     8
+    ΓÇó Pooling:       last
+
+  Hard Constraints (enforced globally):
+    ΓÇó Lookback:      7 days
+    ΓÇó Batch size:    256
+    ΓÇó Learning rate: 0.001
+    ΓÇó Epochs:        30
+    ΓÇó Optimizer:     Adam
+    ΓÇó Loss:          MSE
+    ΓÇó Random seed:   74
+
+  ΓåÆ Setting random seed: 74
+
+  ΓåÆ Using device: cuda
+    GPU: NVIDIA GeForce RTX 3050 4GB Laptop GPU
+
+============================================================
+  STEP 2: LOADING AND PREPARING DATA
+============================================================
+
+  ΓåÆ Loading station data: hierarchial/new_Handia_with_hierarchical_quantiles.csv
+    Raw data shape: (22279, 23)
+    Date range: 1961-01-02 to 2021-12-31
+
+  ΓåÆ Detected pre-computed hierarchical features in CSV
+    ΓÇó hierarchical_feature_quantile_0.1
+    ΓÇó hierarchical_feature_quantile_0.5
+    ΓÇó hierarchical_feature_quantile_0.9
+    ΓÇó hierarchical_feature_quantile_0.95
+    Γ£ô Will be INCLUDED (use_hierarchical=True)
+
+  ΓåÆ Determining feature set
+    Γ£ô Including 4 hierarchical features
+    Using auto-detected features
+    Total features: 11
+       1. rainfall
+       2. tmax
+       3. tmin
+       4. waterlevel_upstream
+       5. streamflow_upstream
+       6. waterlevel_final
+       7. streamflow_final
+       8. hierarchical_feature_quantile_0.1
+       9. hierarchical_feature_quantile_0.5
+      10. hierarchical_feature_quantile_0.9
+      11. hierarchical_feature_quantile_0.95
+    Target: streamflow_final
+
+  ΓåÆ Loading processed data
+    Station: new_Handia_with_hierarchical_quantiles
+    Processed shape: (22279, 23)
+
+  ΓåÆ Splitting data by year
+    Train (1971-2010):        14,610 samples
+    Test (1961-1970):         3,651 samples
+    Test (2011-2020):         3,653 samples
+
+  ΓåÆ Scaling features (StandardScaler)
+    Scaler fitted on 11 features
+
+  ΓåÆ Creating PyTorch datasets
+    Lookback window: 7 days (t-7 to t-1)
+    Train dataset:   14,600 sequences
+    Test 61-70:      3,641 sequences
+    Test 11-20:      3,643 sequences
+
+  ΓåÆ Creating DataLoaders
+    Batch size: 256
+    Train batches: 58
+
+============================================================
+  STEP 3: SETTING UP OUTPUT DIRECTORY
+============================================================
+  Run directory: runs\full_20260226_132038
+
+============================================================
+  STEP 4: FITTING RATING CURVE
+============================================================
+
+  ΓåÆ Extracting water level and streamflow data
+    Data points: 14,610
+
+  ΓåÆ Fitting rating curve models
+  quadratic: RMSE=303.645, R┬▓=0.9773
+  exponential: RMSE=784.181, R┬▓=0.8486
+  shifted_quadratic: RMSE=303.654, R┬▓=0.9773
+  shifted_cubic: RMSE=393.396, R┬▓=0.9619
+  power_law: RMSE=302.970, R┬▓=0.9774
+
+Best Rating Curve: power_law
+  RMSE: 302.970
+  R┬▓: 0.9774
+  Params: [179.92359923   1.95565784 260.09991935]
+    Γ£ô Best model: power_law
+    Γ£ô Rating curve saved: runs\full_20260226_132038\rating_curve.pkl
+
+============================================================
+  STEP 5: HANDLING HIERARCHICAL FEATURES
+============================================================
+
+  ΓåÆ Using pre-computed hierarchical features
+    Γ£ô No CatBoost training needed
+    Γ£ô Features already in input data
+
+============================================================
+  STEP 6: CREATING MODEL
+============================================================
+
+  ΓåÆ Initializing SeqLSTMModel
+    Input dimension: 11
+    Model summary: Seq_MHA_Hier_Fitter
+
+  ΓåÆ Counting parameters
+    Total parameters: 123,777
+
+============================================================
+  STEP 7: TRAINING MODEL
+============================================================
+
+  ΓåÆ Setting up optimizer and loss function
+    Optimizer: Adam (lr=0.001)
+    Loss: MSELoss
+
+  ΓåÆ Starting training loop (30 epochs)
+    Progress will be shown every 5 epochs
+
+
+  Epoch  1/30:   0%|                                     
+                    | 0/58 [00:00<?, ?it/s]
+                                                         
+                                           
+Traceback (most recent call last):
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final Stuff\srip-transformer\src\train.py", 
+line 707, in <module>
+    main()
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final Stuff\srip-transformer\src\train.py", 
+line 573, in main
+    result = train_epoch(
+             ^^^^^^^^^^^^
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final Stuff\srip-transformer\src\train.py", 
+line 220, in train_epoch
+    outputs = model(batch_x)
+              ^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final 
+Stuff\srip-transformer\src\models\full_model.py", line 
+310, in forward
+    pred_t1, wl_t1 = self.block1(x, hier_feats, 
+self.fitter)
+                     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final 
+Stuff\srip-transformer\src\models\full_model.py", line 
+128, in forward
+    pred_wl = self.wl_head(features)
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\SRIP 2025\Streamflow and Water-level 
+Prediction\Final Stuff\srip-transformer\src\models\sequen
+tial_wrapper.py", line 52, in forward
+    return torch.abs(self.head(x).squeeze(-1))  # Ensure 
+non-negative
+                     ^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\container.py", 
+line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\module.py", line 
+1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python3
+12\Lib\site-packages\torch\nn\modules\linear.py", line 
+134, in forward
+    return F.linear(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: mat1 and mat2 shapes cannot be multiplied 
+(256x64 and 66x33)

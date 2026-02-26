@@ -1,23 +1,22 @@
-# Full Configuration
-# ==================
-# Complete SeqLSTM-MHA model with all components
-# Sequential: ON, MHA: ON, Hierarchical: ON, Fitter: ON
+# Full Configuration (Sequential + MHA + Fitter + Hierarchical)
+# ==============================================================
+# Complete model with ALL components enabled.
+# Sequential: ON, Attention: ON, Fitter: ON, Hierarchical: ON
 
 model:
   sequential: true
+  bidirectional: false
   use_attention: true
-  use_hierarchical: true
   use_fitter: true
+  use_hierarchical: true
 
 lstm:
   hidden_dim: 64
   num_layers: 1
-  bidirectional: false
   dropout: 0.1
 
 attention:
   num_heads: 8
-  pooling: last
 
 training:
   lookback: 7
