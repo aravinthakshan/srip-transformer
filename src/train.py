@@ -328,6 +328,94 @@ def evaluate(
     return results
 
 
+def compute_feature_saliency(
+    model: nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    feature_names: list,
+) -> dict:
+    """
+    Compute gradient × input saliency for each feature at each lookback timestep.
+
+    Works across ALL model configs:
+        - baseline / baseline_mha   : DirectPredictor, shared LSTM graph
+        - bidirectional             : DirectPredictor, bidirectional LSTM
+        - seq / seq_mha             : SequentialLSTM, 3 blocks, detached autoregressive steps
+        - seq_fitter / full         : SequentialLSTM + RatingCurveFitter
+
+    For every sample we compute:
+        saliency[t, f] = |grad(output w.r.t. input[t, f]) * input[t, f]|
+
+    Notes on config-specific behaviour:
+    - SequentialLSTM appends previous predictions as new timesteps via
+      _project_pred_to_timestep, but those are .detach()-ed, so the
+      gradient for t2/t3 only reflects the direct LSTM path — not the
+      autoregressive chain.  This is intentional and consistent.
+    - RatingCurveFitter (_apply_fitter) runs inside torch.no_grad() and
+      produces a detached tensor, so its contribution is not captured in
+      the gradient.  The LSTM path gradient is still fully correct.
+    - The model may also return auxiliary keys ('wl_t1' etc.) which are
+      ignored here — we only saliency the main t1/t2/t3 outputs.
+
+    Returns
+    -------
+    dict with keys "t1", "t2", "t3", each containing:
+        "per_sample"  : list of N arrays, each shape [lookback, n_features]
+        "mean"        : array shape [lookback, n_features]  (mean over all samples)
+        "feature_names": list of feature name strings
+        "timestep_labels": list like ["t-7", "t-6", ..., "t-1"]
+    """
+    model.eval()
+    lookback = next(iter(dataloader))[0].shape[1]
+
+    # accumulate per-sample saliency: {horizon: list of [T, F] arrays}
+    all_saliency = {"t1": [], "t2": [], "t3": []}
+
+    for batch_x, _ in dataloader:
+        batch_x = batch_x.to(device).detach().requires_grad_(True)
+
+        # Single forward pass — all three horizon graphs share the same x.
+        # Works across all configs because:
+        #   - DirectPredictor: shared LSTM, all heads connected to x
+        #   - SequentialLSTM: Blocks 2/3 append t1/t2 predictions as
+        #     .detach()-ed timesteps, so their gradient still flows cleanly
+        #     through x's original 7 timesteps independently per block
+        #   - RatingCurveFitter: runs in torch.no_grad(), its output is
+        #     detached — gradient flows through the LSTM path only
+        predictions = model(batch_x)
+
+        for horizon in ["t1", "t2", "t3"]:
+            model.zero_grad()
+            if batch_x.grad is not None:
+                batch_x.grad.zero_()
+
+            # Only backprop through the main horizon output (not wl_ auxiliaries)
+            predictions[horizon].sum().backward(retain_graph=True)
+
+            # grad shape: [B, T, F]
+            grad = batch_x.grad.detach()  # [B, T, F]
+
+            # gradient × input saliency, absolute value
+            saliency = (grad * batch_x.detach()).abs()  # [B, T, F]
+
+            for s in saliency.cpu().numpy():
+                all_saliency[horizon].append(s)  # [T, F] per sample
+
+    timestep_labels = [f"t-{lookback - i}" for i in range(lookback)]
+
+    results = {}
+    for horizon in ["t1", "t2", "t3"]:
+        arr = np.array(all_saliency[horizon])  # [N, T, F]
+        results[horizon] = {
+            "per_sample": arr.tolist(),          # N × T × F  (one per prediction day)
+            "mean": arr.mean(axis=0).tolist(),   # T × F      (averaged importance)
+            "feature_names": feature_names,
+            "timestep_labels": timestep_labels,
+        }
+
+    return results
+
+
 def main():
     args = parse_args()
 
@@ -708,6 +796,25 @@ def main():
     print_substep("Saving train_history.json")
     with open(os.path.join(run_dir, "train_history.json"), "w") as f:
         json.dump(train_history, f, indent=2, default=str)
+
+    # Compute and save feature saliency (gradient × input importance per timestep)
+    print_substep("Computing feature saliency (gradient × input)")
+    print(f"    Features: {features}")
+    saliency_results = compute_feature_saliency(
+        model, test_last_loader, device, features
+    )
+    saliency_path = os.path.join(run_dir, "feature_saliency.json")
+    with open(saliency_path, "w") as f:
+        json.dump(saliency_results, f, indent=2, default=str)
+    print(f"    Saved: {saliency_path}")
+    print(f"    Shape per horizon: [N_samples × {HARD_CONSTRAINTS['lookback']} timesteps × {len(features)} features]")
+    # Print mean importance summary (averaged over time, per feature)
+    for horizon in ["t1", "t2", "t3"]:
+        mean_sal = np.array(saliency_results[horizon]["mean"])  # [T, F]
+        feature_mean = mean_sal.mean(axis=0)                    # [F] — avg over timesteps
+        top_idx = int(np.argmax(feature_mean))
+        print(f"    {horizon.upper()} most important feature (avg): "
+              f"{features[top_idx]} ({feature_mean[top_idx]:.4f})")
 
     print(f"\n  All results saved to: {run_dir}")
 
