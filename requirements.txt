@@ -17,5 +17,5 @@ tqdm>=4.65.0
 # Optional: Hierarchical features (only needed if training CatBoost from scratch)
 # catboost>=1.2.0
 
-# Optional: For complexity analysis
-# thop>=0.1.1
+# FLOPs profiling (used in train.py and complexity.py)
+thop>=0.1.1

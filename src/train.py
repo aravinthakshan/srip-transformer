@@ -545,12 +545,26 @@ def main():
     print(f"    Model variant:   {model.get_config_summary()}")
 
     # Count parameters
-    print_substep("Counting parameters")
+    print_substep("Counting parameters & FLOPs")
     param_counts = model.count_parameters()
     print(f"    Total parameters: {param_counts['total']:,}")
     for component, count in param_counts.items():
         if count > 0 and component != "total":
             print(f"      • {component}: {count:,}")
+
+    # Compute FLOPs
+    lookback = HARD_CONSTRAINTS["lookback"]
+    dummy_input = torch.randn(1, lookback, len(features)).to(device)
+    try:
+        from thop import profile, clever_format
+        model.eval()
+        with torch.no_grad():
+            flops, _ = profile(model, inputs=(dummy_input,), verbose=False)
+        model.train()
+        flops_str, _ = clever_format([flops, 0], "%.3f")
+        print(f"    FLOPs (per forward pass): {flops_str}")
+    except Exception as e:
+        print(f"    FLOPs: could not compute via thop ({e})")
 
     # ==========================================
     # STEP 6: Training
