@@ -11,6 +11,11 @@ Usage:
 
 import os
 import sys
+
+# Force UTF-8 output so Unicode symbols (✓ ✗ • →) work on Windows cp1252 terminals
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import argparse
 import json
 from pathlib import Path
@@ -480,8 +485,8 @@ def compute_feature_saliency(
     for horizon in ["t1", "t2", "t3"]:
         arr = np.array(all_saliency[horizon])  # [N, T, F]
         results[horizon] = {
-            "per_sample": arr.tolist(),          # N × T × F  (one per prediction day)
-            "mean": arr.mean(axis=0).tolist(),   # T × F      (averaged importance)
+            "per_sample": arr.tolist(),  # N × T × F  (one per prediction day)
+            "mean": arr.mean(axis=0).tolist(),  # T × F      (averaged importance)
             "feature_names": feature_names,
             "timestep_labels": timestep_labels,
         }
@@ -922,14 +927,18 @@ def main():
     with open(saliency_path, "w") as f:
         json.dump(saliency_results, f, indent=2, default=str)
     print(f"    Saved: {saliency_path}")
-    print(f"    Shape per horizon: [N_samples × {HARD_CONSTRAINTS['lookback']} timesteps × {len(features)} features]")
+    print(
+        f"    Shape per horizon: [N_samples × {HARD_CONSTRAINTS['lookback']} timesteps × {len(features)} features]"
+    )
     # Print mean importance summary (averaged over time, per feature)
     for horizon in ["t1", "t2", "t3"]:
         mean_sal = np.array(saliency_results[horizon]["mean"])  # [T, F]
-        feature_mean = mean_sal.mean(axis=0)                    # [F] — avg over timesteps
+        feature_mean = mean_sal.mean(axis=0)  # [F] — avg over timesteps
         top_idx = int(np.argmax(feature_mean))
-        print(f"    {horizon.upper()} most important feature (avg): "
-              f"{features[top_idx]} ({feature_mean[top_idx]:.4f})")
+        print(
+            f"    {horizon.upper()} most important feature (avg): "
+            f"{features[top_idx]} ({feature_mean[top_idx]:.4f})"
+        )
 
     # Compute and save attention weights (per prediction day, per lookback timestep)
     # Skips inference entirely for non-attention configs (saves time in run_all.py)

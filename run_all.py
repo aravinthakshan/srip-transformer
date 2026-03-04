@@ -22,12 +22,18 @@ Configs (ablation order):
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Force UTF-8 output on Windows (avoids cp1252 UnicodeEncodeError)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -217,6 +223,10 @@ def main():
 
             run_start = time.time()
             try:
+                env = os.environ.copy()
+                env["PYTHONIOENCODING"] = "utf-8"
+                env["PYTHONUNBUFFERED"] = "1"
+
                 with open(log_path, "w", encoding="utf-8") as log_file:
                     proc = subprocess.Popen(
                         cmd,
@@ -225,6 +235,7 @@ def main():
                         text=True,
                         encoding="utf-8",
                         errors="replace",
+                        env=env,
                     )
                     for line in proc.stdout:
                         print(line, end="")  # live console output
