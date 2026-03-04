@@ -155,12 +155,13 @@ class SeqLSTMModel(nn.Module):
         Args:
             x: Input tensor of shape [B, T, input_dim]
                T = lookback (t-7 to t-1), NOT including day t
+            **kwargs: Passed through to the predictor (e.g. return_attn_weights=True)
 
         Returns:
             predictions: Dict with keys 't1', 't2', 't3' containing predictions [B]
                         (may also contain 'wl_t1', 'wl_t2', 'wl_t3' if fitter is used)
         """
-        return self.predictor(x)
+        return self.predictor(x, **kwargs)
 
     def set_fitter(self, fitter: RatingCurveFitter):
         """

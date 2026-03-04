@@ -180,8 +180,8 @@ class SequentialLSTM(nn.Module):
             )
 
     def _extract_features(
-        self, hidden_states: torch.Tensor, mha_block=None
-    ) -> torch.Tensor:
+        self, hidden_states: torch.Tensor, mha_block=None, return_weights: bool = False
+    ):
         """
         Extract a single feature vector from LSTM hidden states.
 
@@ -191,17 +191,24 @@ class SequentialLSTM(nn.Module):
         Args:
             hidden_states: [B, T, H] from LSTM
             mha_block: Optional MHABlock to use
+            return_weights: If True, also return attention weights [B, num_heads, 1, T]
 
         Returns:
             features: [B, H]
+            attn_weights: (optional) [B, num_heads, 1, T] — only when return_weights=True
         """
         if self.use_attention and mha_block is not None:
-            # MHA attends over all timesteps using last as query → [B, H]
-            features = mha_block(hidden_states)
+            if return_weights:
+                features, attn_weights = mha_block(hidden_states, return_weights=True)
+                return self.dropout_layer(features), attn_weights
+            else:
+                features = mha_block(hidden_states)
         else:
             # Just use the last hidden state
             features = hidden_states[:, -1, :]
 
+        if return_weights:
+            return self.dropout_layer(features), None
         return self.dropout_layer(features)
 
     def _apply_fitter(self, water_level_pred: torch.Tensor) -> torch.Tensor:
@@ -247,7 +254,8 @@ class SequentialLSTM(nn.Module):
         return projected.unsqueeze(1)  # [B, 1, input_dim]
 
     def forward(
-        self, x: torch.Tensor, external_features: Dict[str, torch.Tensor] = None
+        self, x: torch.Tensor, external_features: Dict[str, torch.Tensor] = None,
+        return_attn_weights: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
         Forward pass through the 3 sequential LSTM blocks.
@@ -255,6 +263,8 @@ class SequentialLSTM(nn.Module):
         Args:
             x: Input tensor [B, T, input_dim] where T = lookback (7)
             external_features: Unused, kept for interface compatibility
+            return_attn_weights: If True, attach '_attn_weights' to predictions dict.
+                                 Only has effect when use_attention=True.
 
         Returns:
             predictions: Dict with keys 't1', 't2', 't3' and values [B]
@@ -269,12 +279,19 @@ class SequentialLSTM(nn.Module):
         mha2 = self.mha_block2 if self.use_attention else None
         mha3 = self.mha_block3 if self.use_attention else None
 
+        # Only extract weights when explicitly requested AND attention is on
+        extract_weights = return_attn_weights and self.use_attention
+        w1 = w2 = w3 = None
+
         if self.use_fitter:
             # ===== STREAMFLOW MODE WITH FITTER =====
 
             # --- Block 1: predict WL T+1, then SF T+1 ---
             h1, _ = self.lstm_block1(x)  # [B, T, H]
-            h1_feat = self._extract_features(h1, mha1)  # [B, H]
+            if extract_weights:
+                h1_feat, w1 = self._extract_features(h1, mha1, return_weights=True)
+            else:
+                h1_feat = self._extract_features(h1, mha1)  # [B, H]
 
             wl_t1 = self.wl_head1(h1_feat)  # [B, 1]
             expected_sf_t1 = self._apply_fitter(wl_t1)  # [B, 1]
@@ -288,7 +305,10 @@ class SequentialLSTM(nn.Module):
             x2 = torch.cat([x, t1_timestep], dim=1)  # [B, T+1, D]
 
             h2, _ = self.lstm_block2(x2)  # [B, T+1, H]
-            h2_feat = self._extract_features(h2, mha2)  # [B, H]
+            if extract_weights:
+                h2_feat, w2 = self._extract_features(h2, mha2, return_weights=True)
+            else:
+                h2_feat = self._extract_features(h2, mha2)  # [B, H]
 
             wl_t2 = self.wl_head2(h2_feat)
             expected_sf_t2 = self._apply_fitter(wl_t2)
@@ -302,7 +322,10 @@ class SequentialLSTM(nn.Module):
             x3 = torch.cat([x, t1_timestep, t2_timestep], dim=1)  # [B, T+2, D]
 
             h3, _ = self.lstm_block3(x3)  # [B, T+2, H]
-            h3_feat = self._extract_features(h3, mha3)  # [B, H]
+            if extract_weights:
+                h3_feat, w3 = self._extract_features(h3, mha3, return_weights=True)
+            else:
+                h3_feat = self._extract_features(h3, mha3)  # [B, H]
 
             wl_t3 = self.wl_head3(h3_feat)
             expected_sf_t3 = self._apply_fitter(wl_t3)
@@ -316,7 +339,10 @@ class SequentialLSTM(nn.Module):
 
             # --- Block 1 ---
             h1, _ = self.lstm_block1(x)  # [B, T, H]
-            h1_feat = self._extract_features(h1, mha1)  # [B, H]
+            if extract_weights:
+                h1_feat, w1 = self._extract_features(h1, mha1, return_weights=True)
+            else:
+                h1_feat = self._extract_features(h1, mha1)  # [B, H]
             pred_t1 = torch.abs(self.head1(h1_feat).squeeze(-1))  # [B]
             predictions["t1"] = pred_t1
 
@@ -325,7 +351,10 @@ class SequentialLSTM(nn.Module):
             x2 = torch.cat([x, t1_timestep], dim=1)
 
             h2, _ = self.lstm_block2(x2)
-            h2_feat = self._extract_features(h2, mha2)
+            if extract_weights:
+                h2_feat, w2 = self._extract_features(h2, mha2, return_weights=True)
+            else:
+                h2_feat = self._extract_features(h2, mha2)
             pred_t2 = torch.abs(self.head2(h2_feat).squeeze(-1))
             predictions["t2"] = pred_t2
 
@@ -334,9 +363,26 @@ class SequentialLSTM(nn.Module):
             x3 = torch.cat([x, t1_timestep, t2_timestep], dim=1)
 
             h3, _ = self.lstm_block3(x3)
-            h3_feat = self._extract_features(h3, mha3)
+            if extract_weights:
+                h3_feat, w3 = self._extract_features(h3, mha3, return_weights=True)
+            else:
+                h3_feat = self._extract_features(h3, mha3)
             pred_t3 = torch.abs(self.head3(h3_feat).squeeze(-1))
             predictions["t3"] = pred_t3
+
+        # Attach per-block attention weights only when requested
+        if extract_weights:
+            # w shape per block: [B, num_heads, 1, T_block] where:
+            #   Block1: T_block = lookback (7)
+            #   Block2: T_block = lookback + 1 (8)  — last position is appended t1 pred
+            #   Block3: T_block = lookback + 2 (9)  — last two are appended t1/t2 preds
+            # We slice [:lookback] to keep only the original input timesteps.
+            lookback = x.shape[1]  # original input length (7)
+            predictions["_attn_weights"] = {
+                "t1": w1[:, :, 0, :lookback].detach(),
+                "t2": w2[:, :, 0, :lookback].detach(),
+                "t3": w3[:, :, 0, :lookback].detach(),
+            }
 
         return predictions
 
@@ -428,7 +474,8 @@ class DirectPredictor(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, external_features: Dict[str, torch.Tensor] = None
+        self, x: torch.Tensor, external_features: Dict[str, torch.Tensor] = None,
+        return_attn_weights: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
         Forward pass: single LSTM (+ optional MHA) + independent heads.
@@ -436,15 +483,22 @@ class DirectPredictor(nn.Module):
         Args:
             x: Input [B, T, input_dim]
             external_features: Unused, kept for interface compatibility
+            return_attn_weights: If True, attach '_attn_weights' to predictions dict.
+                                 Only has effect when use_attention=True.
 
         Returns:
             predictions: Dict with 't1', 't2', 't3' keys
         """
         hidden_states, (h_n, _) = self.lstm(x)  # [B, T, H*dirs]
 
+        extract_weights = return_attn_weights and self.use_attention
+        attn_weights = None
+
         if self.use_attention:
-            # MHA attends over all hidden states → [B, effective_hidden]
-            features = self.mha(hidden_states)
+            if extract_weights:
+                features, attn_weights = self.mha(hidden_states, return_weights=True)
+            else:
+                features = self.mha(hidden_states)
         else:
             # Use last hidden state
             if self.bidirectional:
@@ -459,6 +513,13 @@ class DirectPredictor(nn.Module):
         predictions = {}
         for horizon, head in self.heads.items():
             predictions[horizon] = torch.abs(head(features).squeeze(-1))  # [B]
+
+        # Attach attention weights only when explicitly requested
+        if extract_weights:
+            # attn_weights: [B, num_heads, 1, T] → squeeze query dim → [B, num_heads, T]
+            w = attn_weights[:, :, 0, :].detach()
+            # DirectPredictor has a single shared MHA — same weights for all horizons
+            predictions["_attn_weights"] = {"t1": w, "t2": w, "t3": w}
 
         return predictions
 

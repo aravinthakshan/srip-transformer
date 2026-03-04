@@ -328,6 +328,79 @@ def evaluate(
     return results
 
 
+def compute_attention_weights(
+    model: nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    use_attention: bool,
+) -> dict:
+    """
+    Extract attention weights from MHA blocks for every prediction day.
+
+    Only runs inference when use_attention=True (baseline_mha, seq_mha, full).
+    For non-attention configs, returns a lightweight stub immediately — no
+    forward passes are performed, so run_all.py doesn't waste time on the
+    4 configs that have no attention.
+
+    Returns
+    -------
+    dict with keys "t1", "t2", "t3", each containing:
+        "per_sample"     : list of N arrays, each shape [lookback, num_heads]
+                           — raw per-head weights for every prediction day
+        "mean_over_heads": list of N arrays, each shape [lookback]
+                           — averaged over heads, one weight vector per day
+        "mean"           : array shape [lookback, num_heads]
+                           — averaged over all N days
+        "timestep_labels": list like ["t-7", "t-6", ..., "t-1"]
+        "has_attention"  : bool — False for non-attention configs
+    """
+    lookback = next(iter(dataloader))[0].shape[1]
+    timestep_labels = [f"t-{lookback - i}" for i in range(lookback)]
+
+    # Fast path — skip entirely for non-attention configs
+    if not use_attention:
+        stub = {
+            "has_attention": False,
+            "per_sample": None,
+            "mean_over_heads": None,
+            "mean": None,
+            "timestep_labels": timestep_labels,
+        }
+        return {"t1": stub, "t2": stub, "t3": stub}
+
+    model.eval()
+    all_weights = {"t1": [], "t2": [], "t3": []}
+
+    with torch.no_grad():
+        for batch_x, _ in dataloader:
+            batch_x = batch_x.to(device)
+            predictions = model(batch_x, return_attn_weights=True)
+
+            raw = predictions.get("_attn_weights")
+            if raw is None:
+                break  # shouldn't happen, but guard against it
+
+            for horizon in ["t1", "t2", "t3"]:
+                w = raw[horizon]  # [B, num_heads, T]
+                # w: [B, num_heads, T] → transpose to [B, T, num_heads]
+                w_np = w.cpu().numpy().transpose(0, 2, 1)  # [B, T, num_heads]
+                for s in w_np:
+                    all_weights[horizon].append(s)  # [T, num_heads] per sample
+
+    results = {}
+    for horizon in ["t1", "t2", "t3"]:
+        arr = np.array(all_weights[horizon])       # [N, T, num_heads]
+        results[horizon] = {
+            "has_attention": True,
+            "per_sample": arr.tolist(),             # N × T × num_heads
+            "mean_over_heads": arr.mean(axis=-1).tolist(),  # N × T
+            "mean": arr.mean(axis=0).tolist(),      # T × num_heads
+            "timestep_labels": timestep_labels,
+        }
+
+    return results
+
+
 def compute_feature_saliency(
     model: nn.Module,
     dataloader: DataLoader,
@@ -857,6 +930,32 @@ def main():
         top_idx = int(np.argmax(feature_mean))
         print(f"    {horizon.upper()} most important feature (avg): "
               f"{features[top_idx]} ({feature_mean[top_idx]:.4f})")
+
+    # Compute and save attention weights (per prediction day, per lookback timestep)
+    # Skips inference entirely for non-attention configs (saves time in run_all.py)
+    print_substep("Extracting attention weights")
+    attn_results = compute_attention_weights(
+        model, test_last_loader, device,
+        use_attention=config_dict.get("use_attention", False),
+    )
+    attn_path = os.path.join(run_dir, "attention_weights.json")
+    with open(attn_path, "w") as f:
+        json.dump(attn_results, f, indent=2, default=str)
+    print(f"    Saved: {attn_path}")
+    if attn_results["t1"]["has_attention"]:
+        lookback = HARD_CONSTRAINTS["lookback"]
+        n_samples = len(attn_results["t1"]["per_sample"])
+        num_heads = len(attn_results["t1"]["per_sample"][0][0])
+        print(f"    Shape per horizon: [N={n_samples} × T={lookback} timesteps × {num_heads} heads]")
+        # Print which lookback step gets most attention on average
+        for horizon in ["t1", "t2", "t3"]:
+            mean_over_heads = np.array(attn_results[horizon]["mean"]).mean(axis=-1)  # [T]
+            top_t = int(np.argmax(mean_over_heads))
+            labels = attn_results[horizon]["timestep_labels"]
+            print(f"    {horizon.upper()} most attended timestep (avg): "
+                  f"{labels[top_t]} ({mean_over_heads[top_t]:.4f})")
+    else:
+        print(f"    Skipped — config has no attention module")
 
     print(f"\n  All results saved to: {run_dir}")
 

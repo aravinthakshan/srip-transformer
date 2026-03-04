@@ -83,7 +83,8 @@ class MHABlock(nn.Module):
             query=query,
             key=h,
             value=h,
-            need_weights=return_weights
+            need_weights=return_weights,
+            average_attn_weights=False,
         )
         
         # attn_output: [B, 1, H] -> [B, H]
