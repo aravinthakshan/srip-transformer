@@ -552,19 +552,61 @@ def main():
         if count > 0 and component != "total":
             print(f"      • {component}: {count:,}")
 
-    # Compute FLOPs
+    # Compute FLOPs (manual estimate — thop undercounts nn.LSTM)
     lookback = HARD_CONSTRAINTS["lookback"]
-    dummy_input = torch.randn(1, lookback, len(features)).to(device)
+    hidden_dim = config_dict.get("hidden_dim", 64)
+    num_layers = config_dict.get("num_layers", 1)
+    is_bidi = config_dict.get("bidirectional", False)
+    num_heads = config_dict.get("num_heads", 8)
+    use_seq = config_dict.get("sequential", False)
+
+    directions = 2 if is_bidi else 1
+    n_lstm_blocks = 3 if use_seq else 1
+    # FLOPs per LSTM block: 8 * H * (I + H) per timestep, times seq_len
+    lstm_block_flops = (
+        lookback * 8 * hidden_dim * (len(features) + hidden_dim) * directions
+    )
+    total_flops = n_lstm_blocks * lstm_block_flops
+
+    if config_dict.get("use_attention", False):
+        eff_h = hidden_dim * directions
+        # Q,K,V projections + attention scores (QK^T) + attention@V + output proj
+        attn_flops = (
+            3 * lookback * eff_h * eff_h  # QKV
+            + 2 * lookback * lookback * eff_h  # QK^T + attn@V
+            + lookback * eff_h * eff_h
+        )  # out proj
+        total_flops += (n_lstm_blocks if use_seq else 1) * attn_flops
+
+    def _fmt_flops(f):
+        if f >= 1e9:
+            return f"{f / 1e9:.3f}G"
+        if f >= 1e6:
+            return f"{f / 1e6:.3f}M"
+        if f >= 1e3:
+            return f"{f / 1e3:.3f}K"
+        return str(int(f))
+
+    print(f"    FLOPs (per forward pass): {_fmt_flops(total_flops)}  [manual estimate]")
+
+    # Optionally also report thop if it gives a non-zero result
     try:
-        from thop import profile, clever_format
+        from thop import profile as thop_profile, clever_format
+
+        dummy_input = torch.randn(1, lookback, len(features)).to(device)
         model.eval()
         with torch.no_grad():
-            flops, _ = profile(model, inputs=(dummy_input,), verbose=False)
+            thop_flops, _ = thop_profile(model, inputs=(dummy_input,), verbose=False)
         model.train()
-        flops_str, _ = clever_format([flops, 0], "%.3f")
-        print(f"    FLOPs (per forward pass): {flops_str}")
-    except Exception as e:
-        print(f"    FLOPs: could not compute via thop ({e})")
+        if thop_flops > 0:
+            thop_str, _ = clever_format([thop_flops, 0], "%.3f")
+            print(f"    FLOPs (thop profile):     {thop_str}")
+        else:
+            print(
+                f"    FLOPs (thop):             0 — thop cannot trace nn.LSTM kernels, manual estimate used"
+            )
+    except Exception:
+        pass  # thop not installed; manual estimate above is sufficient
 
     # ==========================================
     # STEP 6: Training

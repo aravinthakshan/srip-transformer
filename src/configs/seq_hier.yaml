@@ -1,0 +1,24 @@
+# Sequential LSTM + Hierarchical Features Configuration
+# ======================================================
+# 3 separate LSTM blocks with pre-computed hierarchical quantile features.
+# Adds upstream-hierarchy context (q0.1, q0.5, q0.9, q0.95) to each block.
+# Sequential: ON, Hierarchical: ON, Fitter: OFF, Attention: OFF
+
+model:
+  sequential: true
+  bidirectional: false
+  use_attention: false
+  use_fitter: false
+  use_hierarchical: true
+
+lstm:
+  hidden_dim: 64
+  num_layers: 1
+  dropout: 0.1
+
+training:
+  lookback: 7
+  batch_size: 256
+  learning_rate: 0.001
+  epochs: 30
+  random_seed: 74

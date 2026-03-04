@@ -1,15 +1,17 @@
-# Sequential LSTM + Fitter Configuration
-# ========================================
-# 3 separate LSTM blocks with integrated rating curve fitter.
+# Sequential LSTM + Hierarchical Features + Fitter Configuration
+# ================================================================
+# 3 separate LSTM blocks with pre-computed hierarchical quantile features
+# AND an integrated rating curve fitter.
 # For streamflow: predicts water level first, converts via fitter,
 # then uses expected streamflow to improve the final prediction.
-# Sequential: ON, Fitter: ON
+# Sequential: ON, Hierarchical: ON, Fitter: ON, Attention: OFF
 
 model:
   sequential: true
   bidirectional: false
+  use_attention: false
   use_fitter: true
-  use_hierarchical: false
+  use_hierarchical: true
 
 lstm:
   hidden_dim: 64
