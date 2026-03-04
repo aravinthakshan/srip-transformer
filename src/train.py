@@ -394,12 +394,12 @@ def compute_attention_weights(
 
     results = {}
     for horizon in ["t1", "t2", "t3"]:
-        arr = np.array(all_weights[horizon])       # [N, T, num_heads]
+        arr = np.array(all_weights[horizon])  # [N, T, num_heads]
         results[horizon] = {
             "has_attention": True,
-            "per_sample": arr.tolist(),             # N × T × num_heads
+            "per_sample": arr.tolist(),  # N × T × num_heads
             "mean_over_heads": arr.mean(axis=-1).tolist(),  # N × T
-            "mean": arr.mean(axis=0).tolist(),      # T × num_heads
+            "mean": arr.mean(axis=0).tolist(),  # T × num_heads
             "timestep_labels": timestep_labels,
         }
 
@@ -443,7 +443,11 @@ def compute_feature_saliency(
         "feature_names": list of feature name strings
         "timestep_labels": list like ["t-7", "t-6", ..., "t-1"]
     """
-    model.eval()
+    # MUST use train() mode here — cuDNN LSTM backward raises
+    # "RuntimeError: cudnn RNN backward can only be called in training mode"
+    # if model.eval() is set.  Dropout is the only functional difference
+    # and the small noise it adds to saliency is negligible.
+    model.train()
     lookback = next(iter(dataloader))[0].shape[1]
 
     # accumulate per-sample saliency: {horizon: list of [T, F] arrays}
@@ -490,6 +494,9 @@ def compute_feature_saliency(
             "feature_names": feature_names,
             "timestep_labels": timestep_labels,
         }
+
+    # Restore eval mode for any subsequent inference (e.g. attention weights)
+    model.eval()
 
     return results
 
@@ -944,7 +951,9 @@ def main():
     # Skips inference entirely for non-attention configs (saves time in run_all.py)
     print_substep("Extracting attention weights")
     attn_results = compute_attention_weights(
-        model, test_last_loader, device,
+        model,
+        test_last_loader,
+        device,
         use_attention=config_dict.get("use_attention", False),
     )
     attn_path = os.path.join(run_dir, "attention_weights.json")
@@ -955,14 +964,20 @@ def main():
         lookback = HARD_CONSTRAINTS["lookback"]
         n_samples = len(attn_results["t1"]["per_sample"])
         num_heads = len(attn_results["t1"]["per_sample"][0][0])
-        print(f"    Shape per horizon: [N={n_samples} × T={lookback} timesteps × {num_heads} heads]")
+        print(
+            f"    Shape per horizon: [N={n_samples} × T={lookback} timesteps × {num_heads} heads]"
+        )
         # Print which lookback step gets most attention on average
         for horizon in ["t1", "t2", "t3"]:
-            mean_over_heads = np.array(attn_results[horizon]["mean"]).mean(axis=-1)  # [T]
+            mean_over_heads = np.array(attn_results[horizon]["mean"]).mean(
+                axis=-1
+            )  # [T]
             top_t = int(np.argmax(mean_over_heads))
             labels = attn_results[horizon]["timestep_labels"]
-            print(f"    {horizon.upper()} most attended timestep (avg): "
-                  f"{labels[top_t]} ({mean_over_heads[top_t]:.4f})")
+            print(
+                f"    {horizon.upper()} most attended timestep (avg): "
+                f"{labels[top_t]} ({mean_over_heads[top_t]:.4f})"
+            )
     else:
         print(f"    Skipped — config has no attention module")
 
