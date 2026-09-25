@@ -21,7 +21,18 @@ Hiren Solanki, A. S. Aravinthakshan, Sayuj Gupta, and Vimal Mishra
 
 The study forecasts water level and streamflow in the reservoir-regulated Narmada basin. Sequential forecasting, upstream information, and temporal attention help capture flood magnitude and timing across longer lead times.
 
+## Architecture from the paper
+
+[![Figure 2: SeqLSTM-MHA architecture with input features, hierarchical feature engineering, sequential water-level and streamflow predictors, rating-curve fitter, and LSTM module](docs/assets/figure-2-architecture.png)](docs/assets/figure-2-architecture.png)
+
+**Figure 2.** Original architecture figure from [Solanki et al. (2026)](https://doi.org/10.1029/2025WR042482), page 6. Click to view at full resolution.
+
 ## Published results
+
+[![Table 1: NSE comparison for streamflow and water-level forecasts at one-, two-, and three-day lead times, comparing multiple linear regression, vanilla LSTM, CatBoost, Bi-LSTM, and SeqLSTM-MHA](docs/assets/table-1-results.png)](docs/assets/table-1-results.png)
+
+**Table 1.** Main benchmark comparison for 2011–2019, cropped from page 9 of the [published paper](https://doi.org/10.1029/2025WR042482). Higher NSE is better. Both images are reproduced under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); © 2026 The Authors. [Asset sources](docs/assets/SOURCES.md).
+
 
 Highlights from the [paper abstract](https://doi.org/10.1029/2025WR042482). NSE is Nash–Sutcliffe efficiency; higher is better.
 
